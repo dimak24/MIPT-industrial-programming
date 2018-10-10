@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <assert.h>
 #include <new>
@@ -21,7 +20,10 @@ template <typename T>
 class Stack {
 private:
     const unsigned int TRUE_CANARY__ = 0xDEADBEEFu;
-    const float GROWTH_FACTOR = 2;
+
+    const float GROWTH_FACTOR__ = 2;
+    const float SHRINKAGE_FACTOR__ = 0.5;
+    const size_t INITIAL_CAPACITY__ = 128;
 
     size_t capacity_;
     size_t size_;
@@ -60,49 +62,53 @@ private:
     }
 
     void print_error_() {
-        printf("     ERROR!!!!!!!\n");
+        printf("Stack (%p)     ERROR!!!!!!!\n", this);
         if (*get_first_canary_ptr_() != TRUE_CANARY__)
-            printf("The first canary is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
-                   TRUE_CANARY__, *get_first_canary_ptr_());
+            printf("The first canary (%p) is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
+                   get_first_canary_ptr_(), TRUE_CANARY__, *get_first_canary_ptr_());
 
         if (*get_second_canary_ptr_() != TRUE_CANARY__)
-            printf("The second canary is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
-                   TRUE_CANARY__, *get_second_canary_ptr_());
+            printf("The second canary (%p) is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
+                   get_second_canary_ptr_(), TRUE_CANARY__, *get_second_canary_ptr_());
 
         if (*get_third_canary_ptr_() != TRUE_CANARY__)
-            printf("The third canary is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
-                   TRUE_CANARY__, *get_third_canary_ptr_());
+            printf("The third canary (%p) is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
+                   get_third_canary_ptr_(), TRUE_CANARY__, *get_third_canary_ptr_());
 
         if (*get_check_sum_ptr_() != sum_up_())
-            printf("Check sum is wrong!!!\n    Expected: %" PRIu64 "\n    Found: %" PRIu64 "\n",
-                   sum_up_(), *get_check_sum_ptr_());
+            printf("Check sum (%p) is wrong!!!\n    Expected: %" PRIu64 "\n    Found: %" PRIu64 "\n",
+                   get_check_sum_ptr_(), sum_up_(), *get_check_sum_ptr_());
     }
 
-    void expand_if_necessary_() {
-        if (size_ == capacity_) {
-            uint64_t check_sum = *get_check_sum_ptr_();
+    void resize_(float resize_factor) {
+        uint64_t check_sum = *get_check_sum_ptr_();
 
-            unsigned char* new_buffer = new unsigned char [(size_t)(sizeof(T) * capacity_ * GROWTH_FACTOR) + 
-                                                           sizeof(uint64_t) + sizeof(unsigned int) * 3];
-            std::uninitialized_move((T*)(buffer_ + sizeof(unsigned int)), 
-                                    (T*)(buffer_ + sizeof(unsigned int) + sizeof(T) * capacity_),
-                                    (T*)(new_buffer + sizeof(unsigned int)));
-            
-            std::swap(buffer_, new_buffer);
-            
-            capacity_ *= GROWTH_FACTOR;
-            *get_second_canary_ptr_() = TRUE_CANARY__;
-            *get_first_canary_ptr_() = TRUE_CANARY__;
-            *get_third_canary_ptr_() = TRUE_CANARY__;
+        unsigned char* new_buffer = new unsigned char [(size_t)(sizeof(T) * capacity_ * GROWTH_FACTOR__) + 
+                                                       sizeof(uint64_t) + sizeof(unsigned int) * 3];
+        std::uninitialized_move((T*)(buffer_ + sizeof(unsigned int)), 
+                                (T*)(buffer_ + sizeof(unsigned int) + sizeof(T) * capacity_),
+                                (T*)(new_buffer + sizeof(unsigned int)));
+        
+        std::swap(buffer_, new_buffer);
+        
+        capacity_ *= resize_factor;
+        *get_second_canary_ptr_() = TRUE_CANARY__;
+        *get_first_canary_ptr_() = TRUE_CANARY__;
+        *get_third_canary_ptr_() = TRUE_CANARY__;
 
-            *get_check_sum_ptr_() = check_sum;
+        *get_check_sum_ptr_() = check_sum;
+    }
 
-        }
+    void resize_if_necessary_() {
+        if (size_ == capacity_)
+            resize_(GROWTH_FACTOR__);
+        else if (capacity_ > INITIAL_CAPACITY__ && size_ == capacity_ / 4)
+            resize_(SHRINKAGE_FACTOR__);
     }
 
 public:
     Stack() 
-        : capacity_(128), size_(0), 
+        : capacity_(INITIAL_CAPACITY__), size_(0), 
           buffer_(new unsigned char [sizeof(T) * capacity_ + sizeof(uint64_t) + sizeof(unsigned int) * 3]) {
             *get_second_canary_ptr_() = TRUE_CANARY__;
             *get_first_canary_ptr_() = TRUE_CANARY__;
@@ -143,11 +149,13 @@ public:
 
     void push(const T& item) {
         ASSERT_OK();
-        expand_if_necessary_();
+        
+        resize_if_necessary_();
 
         new ((T*)(buffer_ + (sizeof(unsigned int) + size_++ * sizeof(T)))) T(item);
-
         *get_check_sum_ptr_() = sum_up_();
+
+        ASSERT_OK();
     }
 
     const T pop() {
@@ -155,11 +163,14 @@ public:
 
         ASSERT_OK();
 
+        resize_if_necessary_();
+
         T* copy_ptr = (T*)(buffer_ + (sizeof(unsigned int) + --size_ * sizeof(T)));
         T copy = *copy_ptr;
         copy_ptr->~T();
-
         *get_check_sum_ptr_() = sum_up_();
+        
+        ASSERT_OK();
 
         return copy;
     }
