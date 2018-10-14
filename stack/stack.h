@@ -12,7 +12,7 @@
     do { \
           if (!ok()) { \
             dump(); \
-            abort(); \
+            exit(1); \
         } \
     } while(0)
 
@@ -67,12 +67,16 @@ private:
         t.dump(file);
     }
 
+    static void dump_(int a, FILE* file) {
+        fprintf(file, "int (%p) = %d\n", &a, a);
+    }
+
     static void dump_(long long a, FILE* file) {
         fprintf(file, "int (%p) = %lld\n", &a, a);
     }
 
     static void dump_(const char* a, FILE* file) {
-        fprintf(file, "const char* (%p) = %s\n", a, a);
+        fprintf(file, "const char* (%p) = \"%s\"\n", a, a);
     }
 
     static void dump_(double a, FILE* file) {
