@@ -1,16 +1,17 @@
-#include <stdio.h>
 #include <assert.h>
+#include <inttypes.h>
+#include <memory>
 #include <new>
 #include <stdint.h>
-#include <memory>
+#include <stdio.h>
+#include <type_traits>
 #include <stdlib.h>
-#include <inttypes.h>
 
 
 #define ASSERT_OK() \
     do { \
-        if (!ok_()) { \
-            print_error_(); \
+          if (!ok()) { \
+            dump(); \
             abort(); \
         } \
     } while(0)
@@ -24,10 +25,17 @@ private:
     const float GROWTH_FACTOR__ = 2;
     const float SHRINKAGE_FACTOR__ = 0.5;
     const size_t INITIAL_CAPACITY__ = 128;
+    const size_t MAX_CAPACITY__ = 1e9;
 
+
+    unsigned int stack_canary_begin;
+    
     size_t capacity_;
     size_t size_;
     unsigned char* buffer_;
+    
+    unsigned int stack_canary_end;
+
 
     unsigned int* get_first_canary_ptr_() const {
         return (unsigned int*)buffer_;
@@ -54,30 +62,21 @@ private:
         return ans;
     }
 
-    bool ok_() {
-        return *get_third_canary_ptr_() == TRUE_CANARY__ &&
-               *get_second_canary_ptr_() == TRUE_CANARY__ &&
-               *get_first_canary_ptr_() == TRUE_CANARY__ &&
-               *get_check_sum_ptr_() == sum_up_();
+    template <typename Dummy = void>
+    static typename std::enable_if<std::is_class<T>::value, Dummy>::type dump_(const T& t, FILE* file) {
+        t.dump(file);
     }
 
-    void print_error_() {
-        printf("Stack (%p)     ERROR!!!!!!!\n", this);
-        if (*get_first_canary_ptr_() != TRUE_CANARY__)
-            printf("The first canary (%p) is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
-                   get_first_canary_ptr_(), TRUE_CANARY__, *get_first_canary_ptr_());
+    static void dump_(long long a, FILE* file) {
+        fprintf(file, "int (%p) = %lld\n", &a, a);
+    }
 
-        if (*get_second_canary_ptr_() != TRUE_CANARY__)
-            printf("The second canary (%p) is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
-                   get_second_canary_ptr_(), TRUE_CANARY__, *get_second_canary_ptr_());
+    static void dump_(const char* a, FILE* file) {
+        fprintf(file, "const char* (%p) = %s\n", a, a);
+    }
 
-        if (*get_third_canary_ptr_() != TRUE_CANARY__)
-            printf("The third canary (%p) is dead!!!\n    Expected: 0x%x\n    Found: 0x%x\n",
-                   get_third_canary_ptr_(), TRUE_CANARY__, *get_third_canary_ptr_());
-
-        if (*get_check_sum_ptr_() != sum_up_())
-            printf("Check sum (%p) is wrong!!!\n    Expected: %" PRIu64 "\n    Found: %" PRIu64 "\n",
-                   get_check_sum_ptr_(), sum_up_(), *get_check_sum_ptr_());
+    static void dump_(double a, FILE* file) {
+        fprintf(file, "double (%p) = %g\n", &a, a);
     }
 
     void resize_(float resize_factor) {
@@ -108,18 +107,21 @@ private:
 
 public:
     Stack() 
-        : capacity_(INITIAL_CAPACITY__), size_(0), 
-          buffer_(new unsigned char [sizeof(T) * capacity_ + sizeof(uint64_t) + sizeof(unsigned int) * 3]) {
+        : stack_canary_begin(TRUE_CANARY__), 
+          capacity_(INITIAL_CAPACITY__), size_(0), 
+          buffer_(new unsigned char [sizeof(T) * capacity_ + sizeof(uint64_t) + sizeof(unsigned int) * 3]),
+          stack_canary_end(TRUE_CANARY__) {
             *get_second_canary_ptr_() = TRUE_CANARY__;
             *get_first_canary_ptr_() = TRUE_CANARY__;
             *get_third_canary_ptr_() = TRUE_CANARY__;
 
-            *get_check_sum_ptr_() = 0;
+            *get_check_sum_ptr_() = sum_up_();
     }
 
     Stack(const Stack<T>& another)
-        : capacity_(another.capacity_), size_(another.size_),
-          buffer_(new unsigned char [sizeof(T) * capacity_ + sizeof(uint64_t) + sizeof(unsigned int) * 3]) {
+        : stack_canary_begin(another.stack_canary_begin), capacity_(another.capacity_), size_(another.size_),
+          buffer_(new unsigned char [sizeof(T) * capacity_ + sizeof(uint64_t) + sizeof(unsigned int) * 3]),
+          stack_canary_end(another.stack_canary_end) {
             *get_second_canary_ptr_() = *another.get_first_canary_ptr_();
             *get_first_canary_ptr_() = *another.get_second_canary_ptr_();
             *get_third_canary_ptr_() = *another.get_third_canary_ptr_();
@@ -132,7 +134,9 @@ public:
         }
 
     Stack(Stack<T>&& another)
-        : capacity_(another.capacity_), size_(another.size_) {
+        : stack_canary_begin(another.stack_canary_begin), 
+          capacity_(another.capacity_), size_(another.size_),
+          stack_canary_end(another.stack_canary_end) {
             buffer_ = another.buffer_;
             another.buffer_ = nullptr;
         }
@@ -146,6 +150,49 @@ public:
 
     Stack& operator=(const Stack& another) = delete;
     Stack& operator=(Stack&& another) = delete;
+
+    bool ok() const {
+        return this &&
+               buffer_ &&
+               size_ >= 0 && capacity_ >= INITIAL_CAPACITY__ &&
+               capacity_ <= MAX_CAPACITY__ &&
+               size_ <= capacity_ &&
+               stack_canary_begin == TRUE_CANARY__ &&
+               stack_canary_end == TRUE_CANARY__ &&
+               *get_third_canary_ptr_() == TRUE_CANARY__ &&
+               *get_second_canary_ptr_() == TRUE_CANARY__ &&
+               *get_first_canary_ptr_() == TRUE_CANARY__ &&
+               *get_check_sum_ptr_() == sum_up_();
+    }
+
+    void dump(FILE* file = nullptr) const {
+        if (!file)
+            file = fopen("stack_dump", "w");
+
+        fprintf(file, "Stack at %p (%s) {\n    stack_canary_begin (%p) = 0x%x (%s)\n    capacity_(%p) = %zu (%s)\n    size_(%p) = %zu (%s)\n\
+    buffer_ (%p) = {\n        first_canary (%p) = 0x%x (%s)\n", 
+            this, ok() ? "OK" : "ERROR", 
+            &stack_canary_begin, stack_canary_begin, stack_canary_begin == TRUE_CANARY__ ? "OK" : "ERROR",
+            &capacity_, capacity_, capacity_ >= INITIAL_CAPACITY__ && capacity_ <= MAX_CAPACITY__ ? "OK" : "ERROR",
+            &size_, size_, size_ >= 0 && size_ <= capacity_ ? "OK" : "ERROR",
+            buffer_,
+            get_first_canary_ptr_(), *get_first_canary_ptr_(), *get_first_canary_ptr_() == TRUE_CANARY__ ? "OK" : "ERROR"
+            );
+
+        for (size_t i = 0; i < size_; ++i) {
+            fprintf(file, "        [%zu] = {\n==================================\n", i);
+            dump_(*((T*)(buffer_ + (sizeof(unsigned int) + i * sizeof(T)))), file);
+            fprintf(file, "\n==================================\n        }\n");
+        }
+        fprintf(file, "        second_canary (%p) = 0x%x (%s)\n        check_sum (%p) = %" PRIu64 " (%s)\n        third_canary (%p) = 0x%x (%s)\n    }\n\
+    stack_canary_end (%p) = 0x%x (%s)\n}", 
+            get_second_canary_ptr_(), *get_second_canary_ptr_(), *get_second_canary_ptr_() == TRUE_CANARY__ ? "OK" : "ERROR",
+            get_check_sum_ptr_(), *get_check_sum_ptr_(), *get_check_sum_ptr_() == sum_up_() ? "OK" : "ERROR",
+            get_third_canary_ptr_(), *get_third_canary_ptr_(), *get_third_canary_ptr_() == TRUE_CANARY__ ? "OK" : "ERROR",
+            &stack_canary_end, stack_canary_end, stack_canary_end == TRUE_CANARY__ ? "OK" : "ERROR"
+            );
+
+    }
 
     void push(const T& item) {
         ASSERT_OK();
@@ -182,5 +229,9 @@ public:
 
     bool empty() const {
         return !size_;
+    } 
+
+    bool operator!() const {
+        return !ok();
     }
 };
