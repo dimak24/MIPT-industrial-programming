@@ -1,14 +1,8 @@
 #include "commands.h"
-#include "../onegin/onegin.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <exception>
-
-
-struct asm_exception : public my_exception {
-    asm_exception(const char* ms) : my_exception(ms) {}
-};
 
 
 int main(int argc, char** argv) {
@@ -58,7 +52,7 @@ int main(int argc, char** argv) {
                                 snprintf(msg, sizeof(msg), 
                                     STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" STYLE("0") " %s: wrong number of aruments (expected %zu)\n",
                                     line, COMMANDS_NAMES[i], ARGS_NUMBERS[i]);
-                                throw asm_exception(msg);
+                                throw proc_exception(msg);
                             }
                             ch = st;
                             while (ch != fin && *ch != ' ')
@@ -71,7 +65,7 @@ int main(int argc, char** argv) {
                                 char msg[1024];
                                 snprintf(msg, sizeof(msg), 
                                     STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" STYLE("0") " wrong arument\n", line);
-                                throw asm_exception(msg);
+                                throw proc_exception(msg);
                             }
                             fwrite(&arg, sizeof(double), 1, compiled);
                         }
@@ -81,12 +75,13 @@ int main(int argc, char** argv) {
                         char msg[1024];
                         snprintf(msg, sizeof(msg), 
                             STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" STYLE("0") " command \"%s\" not found\n", line, buf);
-                        throw asm_exception(msg);
+                        throw proc_exception(msg);
                     };
             }
-        } catch (asm_exception& e) {
+        } catch (proc_exception& e) {
             fprintf(stderr, "%s", e.what());
             remove(filename);
+            exit(1);
         } 
     }
 }
