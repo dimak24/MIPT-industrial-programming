@@ -1,15 +1,21 @@
-#include "commands.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tuple>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <math.h>
 #include <exception>
 #include <system_error>
 #include <errno.h>
 #include <fcntl.h>
 #include "../stack/stack.h"
+#include "processor.h"
+#include "reader.h"
+
+
+std::array<double, __REGISTERS_NUMBER__> registers = {};
+std::array<double, RAM_SIZE> RAM = {};
 
 
 int main(int argc, char** argv) {
@@ -23,59 +29,35 @@ int main(int argc, char** argv) {
 
     std::tie(prog, size) = read_text(argv[1]);
 
-    try {
-        verify(prog, size, "proc");
-    } catch (proc_exception& e) {
-        fprintf(stderr, "%s", e.what());
-        exit(1);
-    }
+    // try {
+    //     verify(prog, size, "proc");
+    // } catch (proc_exception& e) {
+    //     fprintf(stderr, "%s", e.what());
+    //     exit(1);
+    // }
 
-    const char* cur = prog + strlen(SGN);
+    int ip = strlen(SGN);
     const char* fin = prog + size;
 
     Stack<double> stack;
     double args[2];
     bool end = false;
-    while (cur != fin && !end) {
-        size_t command = *(unsigned char*)cur;
-        ++cur;
+    while (prog + ip != fin && !end) {
+        size_t command = *(unsigned char*)(prog + ip);
+        ++ip;
         for (size_t i = 0; i < ARGS_NUMBERS[command]; ++i) {
-            args[i] = *(double*)cur;
-            cur += sizeof(double);
+            args[i] = *(double*)(prog + ip);
+            ip += sizeof(double);
         }
         switch (command) {
-            case PUSH:
-                stack.push(args[0]);
+
+#define DEF_CMD(cmd, args_number, code) \
+            case CMD_##cmd: \
+                code; \
                 break;
-            case POP:
-                stack.pop();
-                break;
-            case IN:
-                scanf("%lf", &args[0]);
-                stack.push(args[0]);
-                break;
-            case ADD:
-                args[0] = stack.pop(), args[1] = stack.pop();
-                stack.push(args[0] + args[1]);
-                break;
-            case MUL:
-                args[0] = stack.pop(), args[1] = stack.pop();
-                stack.push(args[0] * args[1]);
-                break;
-            case SUB:
-                args[0] = stack.pop(), args[1] = stack.pop();
-                stack.push(args[1] - args[0]);
-                break;
-            case DIV:
-                args[0] = stack.pop(), args[1] = stack.pop();
-                stack.push(args[1] / args[0]);
-                break;
-            case OUT:
-                printf("%lf\n", stack.pop());
-                break;
-            case END:
-                end = true;
-                break;
+#include "commands.h"
+#undef DEF_CMD
+
             default: __builtin_unreachable();
         }
     }

@@ -19,6 +19,12 @@
 #include <system_error>
 #include <errno.h>
 
+#define PANIC() \
+    do { \
+        const int saved_errno = errno; \
+        throw std::system_error(saved_errno, std::generic_category(), filename); \
+    } while(0)
+
 
 /*!
     \brief Структура, содержащая указатель на начало строки в тексте и её длину.
@@ -85,35 +91,23 @@ static inline bool is_ascii(unsigned char c) {
  */
 std::pair<const char*, size_t> read_text(const char* filename) {
     int fd = open(filename, O_RDONLY);
-    if (fd == -1) {
-        const int saved_errno = errno;
-        throw std::system_error(saved_errno, std::generic_category(), filename);
-    }
+    if (fd == -1)
+        PANIC();
 
     struct stat s = {};
-    if (fstat(fd, &s) == -1) {
-        const int saved_errno = errno;
-        throw std::system_error(saved_errno, std::generic_category(), filename);
-    }
+    if (fstat(fd, &s) == -1)
+        PANIC();
 
     size_t size = s.st_size;
     char* text = new char [size];
     
     for (size_t n_read = 0; n_read != size; ) {
         ssize_t r = read(fd, text + n_read, size - n_read);
-        if (r == -1)  {
-            const int saved_errno = errno;
-            throw std::system_error(saved_errno, std::generic_category(), filename);
-        }
+        if (r == -1)
+            PANIC();
         if (!r)
             break;
         n_read += r;
-    }
-    size_t str_count = 1;
-    const char* cur = text;
-    while (cur != text + size && (cur = (char*)memchr(cur, '\n', size - (cur - text)))) {
-        ++str_count;
-        ++cur;
     }
 
     close(fd);
@@ -157,15 +151,12 @@ std::pair<String*, size_t> split_text(const char* text, size_t size) {
 */
 void write_text(String* strings, size_t strings_count, const char* filename) {
     FILE* sorted = fopen(filename, "w");
-    if (!sorted) {
-        const int saved_errno = errno;
-        throw std::system_error(saved_errno, std::generic_category(), filename);
-    }
+    if (!sorted)
+        PANIC();
     for (size_t i = 0; i < strings_count; ++i)
         fwrite(strings[i].begin, 1, strings[i].lenght, sorted);
     fclose(sorted);
 }
-
 
 
 int main() {
@@ -174,7 +165,7 @@ int main() {
     const char* text = "";
     size_t size = 0;
 
-    std::tie(text, size) = read_text("kek");
+    std::tie(text, size) = read_text("onegin.txt");
 
 // выделение строк
     String* strings = 0;

@@ -1,0 +1,10 @@
+:kek
+IN
+PUSH 2
+POP [rax]
+POP [rbx+3]
+PUSH [3]
+PUSH [0]
+MUL
+OUT
+JMP :kek

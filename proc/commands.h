@@ -1,137 +1,166 @@
-#pragma once
-    
-#include <array>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <assert.h>
-#include <string.h>
-#include <algorithm>
-#include <tuple>
-#include <exception>
-#include <system_error>
-#include <errno.h>
 
-
-#define SGN "DK24o5"
-#define STYLE(code) "\033[" code "m"
-#define PANIC() \
-    do { \
-        const int saved_errno = errno; \
-        throw std::system_error(saved_errno, std::generic_category(), filename); \
-    } while(0)
-
-
-enum Command : unsigned char {
-    END,
-    PUSH,
-    POP,
-    MUL,
-    ADD,
-    SUB,
-    DIV,
-    IN,
-    OUT,
-    __COMMANDS_NUMBER__
-};
-
-static constexpr auto get_commands_args_() {
-    std::array<size_t, __COMMANDS_NUMBER__> args_numbers = {};
-
-    args_numbers[PUSH] = 1;
-
-    return args_numbers;
+#define PUSH(a) stack.push(a)
+#define POP() stack.pop()
+#define PUSH_REG(reg) PUSH(registers[reg])
+#define POP_REG(reg) registers[reg] = POP()
+#define PUSH_MEM(index) PUSH(RAM[index])
+#define POP_MEM(index) RAM[index] = POP()
+#define let double
+#define READ() ({ \
+    let a = 0; \
+    scanf("%lf", &a); \
+    a; \
+})
+#define WRITE(a) { \
+    printf("%lf\n", a); \
 }
-
-static constexpr auto get_commands_names_() {
-    std::array<const char*, __COMMANDS_NUMBER__> commands_names = {};
-
-    commands_names[END] = "END";
-    commands_names[PUSH] = "PUSH";
-    commands_names[POP] = "POP";
-    commands_names[MUL] = "MUL";
-    commands_names[ADD] = "ADD";
-    commands_names[SUB] = "SUB";
-    commands_names[DIV] = "DIV";
-    commands_names[IN] = "IN";
-    commands_names[OUT] = "OUT";
-
-    return commands_names;
-}
-
-constexpr static auto ARGS_NUMBERS = get_commands_args_();
-
-constexpr static auto COMMANDS_NAMES = get_commands_names_();
+#define EPS 1e-6
+#define ABS(a) ((a) >= 0 ? (a) : -(a))
+#define EQUAL(a, b) (ABS((a) - (b)) <= EPS)
+#define LESS(a, b) ((a) + EPS < (b))
+#define GRT(a, b) ((b) + EPS < (a)) 
 
 
-struct proc_exception : public std::exception {
-    const char* msg;
+DEF_CMD(END, 0, {
+    return 0;
+})
 
-    proc_exception(const char* msg) : msg(msg) {}
+DEF_CMD(PUSH, 2, {
+    let reg = (int)args[1] % (__REGISTERS_NUMBER__ + 1) - 1;
+    let shift = (int)args[1] / (__REGISTERS_NUMBER__ + 1);
+    args[0] == 0 ? PUSH(args[1]) : 
+    args[0] == 1 ? PUSH_REG(args[1]) :
+                   PUSH_MEM(registers[reg] + shift);
+})
 
-    virtual const char* what() {
-        return msg;
-    }
-};
+DEF_CMD(POP, 2, {
+    let reg = (int)args[1] % (__REGISTERS_NUMBER__ + 1) - 1;
+    let shift = (int)args[1] / (__REGISTERS_NUMBER__ + 1);
+    args[0] == 0 ? POP() : 
+    args[0] == 1 ? POP_REG(args[1]) :
+                   POP_MEM(registers[reg] + shift);
+})
 
+DEF_CMD(ADD, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH(a + b);
+})
 
-static std::pair<const char*, size_t> read_text(const char* filename) {
-    int fd = open(filename, O_RDONLY);
-    if (fd == -1)
-        PANIC();
+DEF_CMD(SUB, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH(b - a);
+})
 
-    struct stat s = {};
-    if (fstat(fd, &s) == -1)
-        PANIC();
+DEF_CMD(MUL, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH(a * b);
+})
 
-    size_t size = s.st_size;
-    char* text = new char [size];
-    
-    for (size_t n_read = 0; n_read != size; ) {
-        ssize_t r = read(fd, text + n_read, size - n_read);
-        if (r == -1)
-            PANIC();
-        if (!r)
-            break;
-        n_read += r;
-    }
+DEF_CMD(DIV, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH(b / a);
+})
 
-    close(fd);
+DEF_CMD(IN, 0, {
+    let a = READ();
+    PUSH(a);
+})
 
-    return {text, size};
-}
+DEF_CMD(OUT, 0, {
+    let a = POP();
+    WRITE(a);
+})
 
-static void verify(const char* prog, size_t size, const char* from) {
-    if (strncmp(prog, SGN, strlen(SGN))) {
-        static char msg[1024];
-        snprintf(msg, sizeof(msg), 
-            STYLE("1") "%s: " STYLE("31") "error: " STYLE("0") "wrong signature\n", from);
-        throw proc_exception(msg);
-    }
-    const char* cur = prog + strlen(SGN);
-    const char* fin = prog + size;  
-    while (cur != fin) {
-        size_t command = *(unsigned char*)cur;
-        if (command >= __COMMANDS_NUMBER__) {
-            char msg[1024];
-            snprintf(msg, sizeof(msg), 
-                STYLE("1") "%s: " STYLE("31") "error:" STYLE("39") "\n    byte %zu:" STYLE("0")
-                " wrong command's code\n", from, prog - cur + strlen(SGN));
-            throw proc_exception(msg);
-        }
-        ++cur;
-        for (size_t i = 0; i < ARGS_NUMBERS[command]; ++i) {
-            if (fin < cur + sizeof(double)) {
-                char msg[1024];
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "%s: " STYLE("31") "error:" STYLE("39") "\n    byte %zu:"
-                    STYLE("0") " wrong arguments for command %s (code: %zu)\n", 
-                    from, prog - cur + strlen(SGN), COMMANDS_NAMES[command], command);
-                throw proc_exception(msg);
-            }
-            cur += sizeof(double);
-        }
-    }
-}
+DEF_CMD(JMP, 1, {
+    ip = (int)args[0];
+})
+
+DEF_CMD(JA, 1, {
+    let a = POP();
+    let b = POP();
+    if (GRT(b, a)) ip = (int)args[0];
+    PUSH(b);
+    PUSH(a);
+})
+
+DEF_CMD(JAE, 1, {
+    let a = POP();
+    let b = POP();
+    if (!LESS(b, a)) ip = (int)args[0];
+    PUSH(b);
+    PUSH(a);
+})
+
+DEF_CMD(JB, 1, {
+    let a = POP();
+    let b = POP();
+    if (LESS(b, a)) ip = (int)args[0];
+    PUSH(b);
+    PUSH(a);
+})
+
+DEF_CMD(JBE, 1, {
+    let a = POP();
+    let b = POP();
+    if (!GRT(b, a)) ip = (int)args[0];
+    PUSH(b);
+    PUSH(a);
+})
+
+DEF_CMD(JE, 1, {
+    let a = POP();
+    let b = POP();
+    if (EQUAL(b, a)) ip = (int)args[0];
+    PUSH(b);
+    PUSH(a);
+})
+
+DEF_CMD(JNE, 1, {
+    let a = POP();
+    let b = POP();
+    if (!EQUAL(b, a)) ip = (int)args[0];
+    PUSH(b);
+    PUSH(a);
+})
+
+DEF_CMD(INC, 0, {
+    PUSH(POP() + 1);
+})
+
+DEF_CMD(DEC, 0, {
+    PUSH(POP() - 1);
+})
+
+DEF_CMD(SQRT, 0, {
+    PUSH(sqrt(POP()));
+})
+
+DEF_CMD(SIN, 0, {
+    PUSH(sin(POP()));
+})
+
+DEF_CMD(COS, 0, {
+    PUSH(cos(POP()));
+})
+
+DEF_CMD(ARCSIN, 0, {
+    PUSH(asin(POP()));
+})
+
+DEF_CMD(ARCCOS, 0, {
+    PUSH(acos(POP()));
+})
+
+// #undef PUSH
+// #undef POP
+// #undef PUSH_REG
+// #undef POP_REG
+// #undef PUSH_MEM
+// #undef POP_MEM
+// #undef READ
+// #undef WRITE
+// #undef let

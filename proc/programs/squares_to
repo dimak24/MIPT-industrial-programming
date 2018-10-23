@@ -1,0 +1,12 @@
+PUSH 0
+IN
+:kek
+POP rax
+PUSH rax
+PUSH rax
+MUL
+OUT
+PUSH rax
+PUSH 1
+SUB
+JB :kek

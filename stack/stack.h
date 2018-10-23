@@ -163,6 +163,10 @@ public:
                size_ <= capacity_ &&
                stack_canary_begin == TRUE_CANARY__ &&
                stack_canary_end == TRUE_CANARY__ &&
+               get_third_canary_ptr_() &&
+               get_second_canary_ptr_() &&
+               get_third_canary_ptr_() &&
+               get_check_sum_ptr_() &&
                *get_third_canary_ptr_() == TRUE_CANARY__ &&
                *get_second_canary_ptr_() == TRUE_CANARY__ &&
                *get_first_canary_ptr_() == TRUE_CANARY__ &&
@@ -185,7 +189,10 @@ public:
 
         for (size_t i = 0; i < size_; ++i) {
             fprintf(file, "        [%zu] = {\n==================================\n", i);
-            dump_(*((T*)(buffer_ + (sizeof(unsigned int) + i * sizeof(T)))), file);
+            T* ptr = (T*)(buffer_ + (sizeof(unsigned int) + i * sizeof(T)));
+            if (!ptr)
+                fprintf(file, "NULL\n");
+            dump_(*ptr, file);
             fprintf(file, "\n==================================\n        }\n");
         }
         fprintf(file, "        second_canary (%p) = 0x%x (%s)\n        check_sum (%p) = %" PRIu64 " (%s)\n        third_canary (%p) = 0x%x (%s)\n    }\n\

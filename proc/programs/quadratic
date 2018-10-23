@@ -1,0 +1,78 @@
+PUSH 0
+IN
+JE :linear
+POP rax
+IN
+IN
+POP rcx
+POP rbx
+PUSH rbx
+PUSH rbx
+MUL
+PUSH 4
+PUSH rax
+PUSH rcx
+MUL
+MUL
+SUB
+JA :zero
+PUSH rax
+PUSH 2
+MUL
+POP rax
+JE :one
+PUSH 2
+OUT
+SQRT
+PUSH rbx
+SUB
+PUSH rax
+DIV
+POP rdx
+PUSH rdx
+PUSH rdx
+OUT
+PUSH -1
+MUL
+PUSH rbx
+PUSH rax
+DIV
+PUSH 2
+MUL
+SUB
+OUT
+END
+:zero
+PUSH 0
+OUT
+END
+:one
+PUSH rbx
+PUSH rax
+DIV
+PUSH -1
+MUL
+OUT
+END
+:linear
+POP
+IN
+JE :c
+IN
+PUSH -1
+MUL
+PUSH 1
+OUT
+POP rcx
+POP rbx
+PUSH rcx
+PUSH rbx
+DIV
+OUT
+END
+:c
+IN
+JNE :zero
+PUSH inf
+OUT
+END
