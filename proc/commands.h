@@ -5,6 +5,8 @@
 #define POP_REG(reg) registers[reg] = POP()
 #define PUSH_MEM(index) PUSH(RAM[index])
 #define POP_MEM(index) RAM[index] = POP()
+#define PUSH_CALL(current_ip) call_stack.push(current_ip)
+#define POP_CALL() call_stack.pop()
 #define let double
 #define READ() ({ \
     let a = 0; \
@@ -153,6 +155,19 @@ DEF_CMD(ARCSIN, 0, {
 
 DEF_CMD(ARCCOS, 0, {
     PUSH(acos(POP()));
+})
+
+DEF_CMD(CALL, 1, {
+    PUSH_CALL(ip);
+    ip = (int)args[0];
+})
+
+DEF_CMD(ENDFUNC, 0, {
+    ip = POP_CALL();
+})
+
+DEF_CMD(FUNC, 1, {
+    ip = (int)args[0];
 })
 
 // #undef PUSH

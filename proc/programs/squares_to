@@ -1,12 +1,22 @@
-PUSH 0
-IN
 :kek
+FUNC sqr
 POP rax
 PUSH rax
 PUSH rax
-MUL
-OUT
 PUSH rax
+MUL
+ENDFUNC
+FUNC print_all_squares
+:again
+POP rax
+PUSH 0
+PUSH rax
+CALL sqr
+OUT_INT
 PUSH 1
 SUB
-JB :kek
+JBE :again
+ENDFUNC
+IN
+CALL print_all_squares
+JMP :kek

@@ -5,13 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <assert.h>
 #include <string.h>
-#include <algorithm>
-#include <tuple>
-#include <exception>
-#include <system_error>
-#include <errno.h>
 #include "processor.h"
 
 

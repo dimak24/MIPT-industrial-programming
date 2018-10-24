@@ -83,6 +83,10 @@ private:
         fprintf(file, "double (%p) = %g\n", &a, a);
     }
 
+    static void dump_(long unsigned a, FILE* file) {
+        fprintf(file, "long unsigned (%p) = %lu\n", &a, a);
+    }
+
     void resize_(float resize_factor) {
         uint64_t check_sum = *get_check_sum_ptr_();
 

@@ -1,17 +1,11 @@
-
-#include "processor.h"
-#include "reader.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tuple>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <exception>
-#include <system_error>
-#include <errno.h>
-#include <fcntl.h>
 #include <map>
+#include "processor.h"
+#include "reader.h"
+#include "verificator.h"
 
 
 int main(int argc, char** argv) {
@@ -26,12 +20,12 @@ int main(int argc, char** argv) {
 
         std::tie(prog, size) = read_text(argv[f]);
 
-        // try {
-        //     verify(prog, size, "dasm");
-        // } catch (proc_exception& e) {
-        //     fprintf(stderr, "%s", e.what());
-        //     exit(1);
-        // }
+        try {
+            verify(prog, size, "dasm");
+        } catch (proc_exception& e) {
+            fprintf(stderr, "%s", e.what());
+            exit(1);
+        }
 
         char filename[1024];
         snprintf(filename, sizeof(filename), "%s.dasm", argv[f]);
@@ -41,15 +35,20 @@ int main(int argc, char** argv) {
 
         std::map<int, int> lines_begin;
         int line = 0;
+        int indent = 0;
 
         const char* cur = prog + strlen(SGN);
         const char* fin = prog + size;
         
         double tmp[2];
         while (cur != fin) {
-            lines_begin[cur - prog] = line++;
+            lines_begin[cur - prog] = ++line;
             unsigned char index = *(unsigned char*)cur;
-            fprintf(raw, "%s", COMMANDS_NAMES[index]);
+            
+            if (index == CMD_ENDFUNC)
+                --indent;
+            
+            fprintf(raw, "%*s%s", indent * 2, "", COMMANDS_NAMES[index]);
             ++cur;
             for (size_t i = 0; i < ARGS_NUMBERS[index]; ++i) {
                 tmp[i] = *(double*)cur;
@@ -99,10 +98,18 @@ int main(int argc, char** argv) {
                 else if (index == CMD_JMP || index == CMD_JA || index == CMD_JB || index == CMD_JE || 
                          index == CMD_JNE || index == CMD_JAE || index == CMD_JBE)
                     fprintf(raw, " %d", lines_begin[(int)tmp[0]]);
+                else if (index == CMD_CALL)
+                    fprintf(raw, " %d", lines_begin[(int)tmp[0]] - 1);
+                else if (index == CMD_FUNC)
+                    fprintf(raw, " %d", line);
                 else
                     fprintf(raw, " %lf", *(double*)cur);
                 cur += sizeof(double);
             }
+
+            if (index == CMD_FUNC) 
+                ++indent;
+            
             fprintf(raw, "\n");
         }
     }

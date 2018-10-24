@@ -2,7 +2,9 @@
 
 
 #include <array>
-#include <string.h>
+#include <system_error>
+#include <errno.h>
+
 
 
 #define SGN "DK24o5"
@@ -14,6 +16,18 @@
     } while(0)
 
 
+struct proc_exception : public std::exception {
+    const char* msg;
+
+    proc_exception(const char* msg) : msg(msg) {}
+
+    virtual const char* what() {
+        return msg;
+    }
+};
+
+
+
 enum Command : unsigned char {
 
 #define DEF_CMD(cmd, args_number, code) CMD_##cmd,
@@ -22,6 +36,17 @@ enum Command : unsigned char {
 
     __COMMANDS_NUMBER__
 };
+
+
+enum Register : unsigned char {
+    rax,
+    rbx,
+    rcx,
+    rdx,
+    __REGISTERS_NUMBER__
+};
+
+
 
 static constexpr auto get_commands_args_() {
     std::array<size_t, __COMMANDS_NUMBER__> args_numbers = {};
@@ -43,14 +68,6 @@ static constexpr auto get_commands_names_() {
     return commands_names;
 }
 
-enum Register : unsigned char {
-    rax,
-    rbx,
-    rcx,
-    rdx,
-    __REGISTERS_NUMBER__
-};
-
 static constexpr auto get_registers_names_() {
     std::array<const char*, __REGISTERS_NUMBER__> registers_names = {};
 
@@ -68,49 +85,3 @@ constexpr static auto COMMANDS_NAMES = get_commands_names_();
 constexpr static auto REGISTERS_NAMES = get_registers_names_();
 
 constexpr size_t RAM_SIZE = 1e4;
-
-
-struct proc_exception : public std::exception {
-    const char* msg;
-
-    proc_exception(const char* msg) : msg(msg) {}
-
-    virtual const char* what() {
-        return msg;
-    }
-};
-
-static void verify(const char* prog, size_t size, const char* from) {
-    static char msg[1024];
-    if (strncmp(prog, SGN, strlen(SGN))) {
-        snprintf(msg, sizeof(msg), 
-            STYLE("1") "%s: " STYLE("31") "error: " STYLE("0") "wrong signature\n", from);
-        throw proc_exception(msg);
-    }
-    const char* cur = prog + strlen(SGN);
-    const char* fin = prog + size;  
-    while (cur != fin) {
-        size_t command = *(unsigned char*)cur;
-        if (command >= __COMMANDS_NUMBER__) {
-            //static char msg[1024];
-            snprintf(msg, sizeof(msg), 
-                STYLE("1") "%s: " STYLE("31") "error:" STYLE("39") "\n    byte %zu:" STYLE("0")
-                " wrong command's code\n", from, prog - cur + strlen(SGN));
-            throw proc_exception(msg);
-        }
-        ++cur;
-        for (size_t i = 0; i < ARGS_NUMBERS[command]; ++i) {
-            if (fin < cur + sizeof(double)) {
-                if (fin >= cur + 3 && *cur == 'r' && *(cur + 1) - 'a' < __REGISTERS_NUMBER__ && *(cur + 2) == 'x')
-                    continue;
-                //static char msg[1024];
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "%s: " STYLE("31") "error:" STYLE("39") "\n    byte %zu:"
-                    STYLE("0") " wrong arguments for command %s (code: %zu)\n", 
-                    from, prog - cur + strlen(SGN), COMMANDS_NAMES[command], command);
-                throw proc_exception(msg);
-            }
-            cur += sizeof(double);
-        }
-    }
-}

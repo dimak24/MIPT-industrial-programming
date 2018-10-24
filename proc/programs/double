@@ -1,10 +1,9 @@
 :kek
-IN
+FUNC double 
 PUSH 2
-POP [rax]
-POP [rbx+3]
-PUSH [3]
-PUSH [0]
 MUL
+ENDFUNC
+IN
+CALL double
 OUT
 JMP :kek
