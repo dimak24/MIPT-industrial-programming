@@ -170,12 +170,14 @@ DEF_CMD(FUNC, 1, {
     ip = (int)args[0];
 })
 
-// #undef PUSH
-// #undef POP
-// #undef PUSH_REG
-// #undef POP_REG
-// #undef PUSH_MEM
-// #undef POP_MEM
-// #undef READ
-// #undef WRITE
-// #undef let
+#undef PUSH
+#undef POP
+#undef PUSH_REG
+#undef POP_REG
+#undef PUSH_MEM
+#undef POP_MEM
+#undef POP_CALL
+#undef PUSH_CALL
+#undef READ
+#undef WRITE
+#undef let

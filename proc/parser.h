@@ -7,12 +7,12 @@
 
 
 
-void shift(char*& ch) {
+static inline void shift(char*& ch) {
     while (*ch == ' ')
         ++ch;
 }
 
-void make_fin(char* buf) {
+static inline void make_fin(char* buf) {
     char* comment = strchr(buf, '#');
     char* endl = strchr(buf, '\n');
     char* last = (comment ? comment : endl ? endl : buf + strlen(buf));
@@ -25,7 +25,7 @@ void make_fin(char* buf) {
 }
 
 
-void parse_push(char* args_buf, FILE* out, size_t line) {
+static void parse_push(char* args_buf, FILE* out, size_t line) {
     static char msg[1024];
     char* st = args_buf;
     shift(st);
@@ -116,7 +116,7 @@ void parse_push(char* args_buf, FILE* out, size_t line) {
 }
 
 
-void parse_pop(char* args_buf, FILE* out, size_t line) {
+static void parse_pop(char* args_buf, FILE* out, size_t line) {
     static char msg[1024];
     char* st = args_buf;
     shift(st);
@@ -198,7 +198,7 @@ void parse_pop(char* args_buf, FILE* out, size_t line) {
 }
 
 
-void parse_jump(char* args_buf, FILE* out, size_t line, auto& labels) {
+static void parse_jump(char* args_buf, FILE* out, size_t line, auto& labels) {
     static char msg[1024];
     char* st = args_buf;
     shift(st);
@@ -224,7 +224,7 @@ void parse_jump(char* args_buf, FILE* out, size_t line, auto& labels) {
 }
 
 
-void parse_func(char* args_buf, FILE* out, auto& funcs) {
+static void parse_func(char* args_buf, FILE* out, auto& funcs) {
     char* st = args_buf;
     shift(st);
 
@@ -233,7 +233,7 @@ void parse_func(char* args_buf, FILE* out, auto& funcs) {
 }
 
 
-void parse_call(char* args_buf, FILE* out, size_t line, auto& funcs) {
+static void parse_call(char* args_buf, FILE* out, size_t line, auto& funcs) {
     static char msg[1024];
     char* st = args_buf;
     shift(st);
@@ -250,7 +250,7 @@ void parse_call(char* args_buf, FILE* out, size_t line, auto& funcs) {
 }
 
 
-void parse(unsigned char command, char* args_buf, FILE* out, size_t line, auto& labels, auto& funcs) {
+static void parse(unsigned char command, char* args_buf, FILE* out, size_t line, auto& labels, auto& funcs) {
     static char msg[1024];
     make_fin(args_buf);
 
