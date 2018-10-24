@@ -57,7 +57,7 @@ void get_funcs(FILE* file, auto& funcs) {
     size_t nbuf = 0;
     int ip_shift = 1;
     std::string cur_func_name("");
-    size_t balance = 0;
+    bool balance = true;
     size_t line = 0;
 
     while (getline(&buf, &nbuf, file) > 0) {
@@ -73,6 +73,12 @@ void get_funcs(FILE* file, auto& funcs) {
         if (!strcmp(buf, "FUNC")) {
             buf = ch + 1;
             shift(buf);
+            if (!balance) {
+                snprintf(msg, sizeof(msg), 
+                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
+                    STYLE("0") " function definition inside another function is permitted\n", line);
+                throw proc_exception(msg);
+            }
             if (!*buf) {
                 snprintf(msg, sizeof(msg), 
                     STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
@@ -88,10 +94,10 @@ void get_funcs(FILE* file, auto& funcs) {
             ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[CMD_FUNC];
             funcs[buf].first = ip_shift;
             cur_func_name = buf;
-            ++balance;
+            balance = false;
         }
         else if (!strcmp(buf, "ENDFUNC")) {
-            if (!balance) {
+            if (balance) {
                 snprintf(msg, sizeof(msg), 
                     STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
                     STYLE("0") " no one function could be finished here\n", line);
@@ -99,7 +105,7 @@ void get_funcs(FILE* file, auto& funcs) {
             }
             ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[CMD_ENDFUNC];
             funcs[cur_func_name].second = ip_shift;
-            --balance;
+            balance = true;
         }
         else
             for (unsigned char i = 0; i < COMMANDS_NAMES.size(); ++i)
@@ -109,7 +115,7 @@ void get_funcs(FILE* file, auto& funcs) {
             }
     }
 
-    if (balance) {
+    if (!balance) {
         snprintf(msg, sizeof(msg), 
             STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
             STYLE("0") " some functions are not finished\n", ++line);
