@@ -1,0 +1,13 @@
+PUSH 240000
+PUSH 0
+:kek
+POP rax
+PUSH rax
+PUSH rax
+SQR
+PUSH 256
+MOD
+POP [rax]
+INC
+JNE :kek
+DRAW 400 200 240000

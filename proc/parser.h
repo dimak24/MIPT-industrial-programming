@@ -167,7 +167,7 @@ static void parse(unsigned char command, char* args_buf, FILE* out, size_t line,
                 throw asm_exception(line, "wrong arument (expected double)");
             
             fwrite(&arg, sizeof(double), 1, out);
-            cur += sizeof(double);
+            cur = end;
         }
     }
 }

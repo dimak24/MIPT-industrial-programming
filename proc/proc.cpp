@@ -7,6 +7,7 @@
 #include "processor.h"
 #include "reader.h"
 #include "verificator.h"
+#include "bmpwriter.h"
 
 
 std::array<double, __REGISTERS_NUMBER__> registers = {};
@@ -39,7 +40,7 @@ int main(int argc, char** argv) {
     Stack<double> stack;
     Stack<uintptr_t> call_stack;
 
-    double args[2];
+    double args[__MAXIMAL_ARGS_NUMBER__];
     bool end = false;
     while (prog + ip != fin && !end) {
         size_t command = *(unsigned char*)(prog + ip);

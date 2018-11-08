@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
         const char* cur = prog + strlen(SGN);
         const char* fin = prog + size;
         
-        double tmp[2];
+        double tmp[__MAXIMAL_ARGS_NUMBER__];
         while (cur != fin) {
             lines_begin[cur - prog] = ++line;
             unsigned char index = *(unsigned char*)cur;

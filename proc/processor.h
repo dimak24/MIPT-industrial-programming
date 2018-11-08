@@ -4,6 +4,7 @@
 #include <array>
 #include <system_error>
 #include <errno.h>
+#include <algorithm>
 
 
 
@@ -19,9 +20,9 @@
 template <typename... Args>
 std::string get_string(const char* format, Args&&... args) {
     int size = snprintf(nullptr, 0, format, std::forward<Args>(args)...);
-    char* msg = new char[size];
+    char* msg = new char[size + 1];
         
-    snprintf(msg, size, format, std::forward<Args>(args)...);
+    snprintf(msg, size + 1, format, std::forward<Args>(args)...);
     std::string ans(msg, size);
 
     delete[] msg;
@@ -78,7 +79,6 @@ enum Register : unsigned char {
 };
 
 
-
 static constexpr auto get_commands_args_() {
     std::array<size_t, __COMMANDS_NUMBER__> args_numbers = {};
 
@@ -112,7 +112,8 @@ static constexpr auto get_registers_names_() {
 
 
 constexpr static auto ARGS_NUMBERS = get_commands_args_();
+constexpr size_t __MAXIMAL_ARGS_NUMBER__ = *std::max_element(ARGS_NUMBERS.begin(), ARGS_NUMBERS.end());
 constexpr static auto COMMANDS_NAMES = get_commands_names_();
 constexpr static auto REGISTERS_NAMES = get_registers_names_();
 
-constexpr size_t RAM_SIZE = 1e4;
+constexpr size_t RAM_SIZE = 1e6;

@@ -67,6 +67,12 @@ DEF_CMD(DIV, 0, {
     PUSH(b / a);
 })
 
+DEF_CMD(MOD, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH(fmod(b, a));
+})
+
 DEF_CMD(IN, 0, {
     let a = READ();
     PUSH(a);
@@ -141,6 +147,11 @@ DEF_CMD(SQRT, 0, {
     PUSH(sqrt(POP()));
 })
 
+DEF_CMD(SQR, 0, {
+    let a = POP();
+    PUSH(a * a);
+})
+
 DEF_CMD(SIN, 0, {
     PUSH(sin(POP()));
 })
@@ -168,6 +179,11 @@ DEF_CMD(ENDFUNC, 0, {
 
 DEF_CMD(FUNC, 1, {
     ip = (int)args[0];
+})
+
+DEF_CMD(DRAW, 3, {
+    fwritebmp(fopen("proc_picture.bmp", "w"), 
+              (int)args[0], (int)args[1], RAM.data(), RAM.data() + (int)args[2]);
 })
 
 #undef PUSH

@@ -26,6 +26,20 @@ static void verify_jump(unsigned char command, const char* cur, const char* beg,
 }
 
 
+static void verify_draw(const char* cur, const char* beg) {
+    double w = *(double*)cur;
+    double h = *(double*)(cur + sizeof(double));
+    double ndata = *(double*)(cur + 2  * sizeof(double));
+
+    if (w < 0 || h < 0 || ndata < 0)
+        throw verificator_exception(beg - cur,
+                    "DRAW: all width, height and ndata have to be greater than 0");
+    if (ndata >= RAM_SIZE)
+        throw verificator_exception(beg - cur + 2 * sizeof(double),
+                    get_string("DRAW: ndata greater than RAM_SIZE (RAM_SIZE = %zu)", RAM_SIZE));
+}
+
+
 static void verify_command(unsigned char command, const char* cur, const char* beg, const char* fin) {
     if ((size_t)(fin - cur) < sizeof(double) * ARGS_NUMBERS[command])
         throw verificator_exception(beg - cur, 
@@ -39,6 +53,8 @@ static void verify_command(unsigned char command, const char* cur, const char* b
              command == CMD_JAE || command == CMD_JBE || command == CMD_JE ||
              command == CMD_CALL || command == CMD_FUNC)
         verify_jump(command, cur, beg, fin);
+    else if (command == CMD_DRAW)
+        verify_draw(cur, beg);
 }
 
 
