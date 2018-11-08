@@ -64,20 +64,36 @@ struct A {
     void square() {
         a *= a;
     }
+
+    void dump(FILE* file, int indent = 0) const {
+        fprintf(file, "%*sstruct A at %p = {\n"
+                      "%*s  a (%p) = %d\n"
+                      "%*s  b (%p) = %s\n"
+                      "%*s  c (%p) = %s\n%*s}\n" ,
+                indent, "", this, indent, "", &a, a, 
+                indent, "", &b, b.c_str(), 
+                indent, "", &c, c.c_str(), indent, "");
+    }
 };
 
 
 void emplace_test() {
-    
-
     List<A> list;
 
     list.emplace_back(2, "lol", "kek");
     list.emplace_back(4, "kek", "lol");
+    list.emplace_front(-2, "lol", "kek");
+    list.emplace_front(-4, "lol", "kek");
 
-    assert(list.front() == A(2, "lol", "kek"));
+    assert(list.front() == A(-4, "lol", "kek"));
     list.pop_front();
-    assert(list.front() == A(4, "kek", "lol"));
+    assert(list.back() == A(4, "kek", "lol"));
+    list.pop_back();
+
+
+    assert(list.back() == A(2, "lol", "kek"));
+    list.pop_back();
+    assert(list.front() == A(-2, "lol", "kek"));
 }
 
 
@@ -154,43 +170,54 @@ void insert_remove_by_iterators_test() {
 void indices_test() {
     List<int> list;
     for (int i = 0; i < 10; ++i)
-        list.push_back(i);
+        list.push_back(i);                                  // 0..9
+
+    List<int>::iterator it = list.begin();
+
+    ++it; ++it; ++it; ++it; ++it;
+    assert(*it == 5);
+
+    list.insert(it, 20);
+    list.insert(it, 30);                                   // 0..4 20 30 5..9
+
+    ++it; ++it; ++it; ++it;
+    list.insert(it, 25);
+    list.insert(it, 35);                                   // 0..4 20 30 5..8 25 35 9
+
+    list.remove(it);                                       // 0..4 20 30 5..8 25 35
+
+    it = list.begin();
+    ++it; ++it;
+
+    list.remove(list.remove(it));                          // 0 1 4 20 30 5..8 25 35
+
+    list.push_back(100);
+    list.push_front(200);                                  //200 0 1 4 20 30 5..8 25 35 100
+
+    list.insert(--list.end(), 156);                        //200 0 1 4 20 30 5..8 25 35 156 100
+
 
     list.pull();
+    list.insert(4, 420);
+    list.remove(8);                                        //200 0 1 4 420 20 30 5 6 8 25 35 156 100
+    list.pull();
 
-    for (int i = 0; i < 10; ++i)
-        assert(i == list[i]);
+    int a[] = {200, 0, 1, 4, 420, 20, 30, 5, 6, 8, 25, 35, 156, 100};
 
-
-    //the same as previously
-
-    size_t i = 0;
-
-    ++i; ++i; ++i; ++i; ++i;
-    assert(list[i] == 5);
-
-    list.insert(i, 20);
-    list.insert(i, 30);
-
-    ++i; ++i; ++i; ++i;
-    list.insert(i, 25);
-    list.insert(i, 35);
-
-    list.remove(i);
-
-    i = 0;
-    ++i; ++i;
-
-    list.remove(i);
-    ++i;
-    list.remove(i);
+    for (size_t j = 0; j < list.size(); ++j)
+        assert(list[j] == a[j]);
+}
 
 
-    int a[] = {0, 1, 4, 20, 30, 5, 6, 7, 8, 25, 35};
+void dump_test() {
+    List<A> list;
 
-    int j = 0;
-    for (List<int>::iterator it = list.begin(); it != list.end(); ++it, ++j)
-        assert(*it == a[j]);
+    list.push_back(A(100, "lol", "kek"));
+    list.push_back(A(200, "lol", "kek"));
+    list.push_back(A(300, "lol", "kek"));
+    list.remove(----list.end());
+
+    list.dump();
 }
 
 
@@ -201,4 +228,5 @@ int main() {
     iterators_test();
     insert_remove_by_iterators_test();
     indices_test();
+    dump_test();
 }

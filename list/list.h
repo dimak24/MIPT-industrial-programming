@@ -2,6 +2,7 @@
 #include <array>
 #include <iterator>
 #include <cassert>
+#include <type_traits>
 
 
 template <typename T>
@@ -28,7 +29,15 @@ private:
         return (*buffer_ptr_)[index / __BLOCK_SIZE__][index % __BLOCK_SIZE__];
     }
 
+    const Node& node_at_(size_t index) const {
+        return (*buffer_ptr_)[index / __BLOCK_SIZE__][index % __BLOCK_SIZE__];
+    }
+
     size_t& next_index_(size_t index) {
+        return node_at_(index).next;
+    }
+
+    size_t next_index_(size_t index) const {
         return node_at_(index).next;
     }
 
@@ -36,7 +45,15 @@ private:
         return node_at_(index).prev;
     }
 
+    size_t prev_index_(size_t index) const {
+        return node_at_(index).prev;
+    }
+
     T& data_(size_t index) {
+        return node_at_(index).data;
+    }
+
+    const T& data_(size_t index) const {
         return node_at_(index).data;
     }
 
@@ -81,6 +98,7 @@ private:
 
         *tail_index_ = first_free_index_;
         first_free_index_ = next_free_index;
+        prev_index_(first_free_index_) = 0;
 
         ++size_;
     }
@@ -110,6 +128,7 @@ private:
         prev_index_(before_which_index) = first_free_index_;
         
         first_free_index_ = next_free_index;
+        prev_index_(first_free_index_) = 0;
 
         ++size_;
     }
@@ -132,12 +151,41 @@ private:
 
         next_index_(index) = first_free_index_;
         prev_index_(index) = 0;
+        prev_index_(first_free_index_) = index;
 
         first_free_index_ = index;
 
         --size_;
 
         return removed_value;
+    }
+
+
+    template <typename Dummy = void>
+    static typename std::enable_if<std::is_class<T>::value, Dummy>::type dump_(const T& t, 
+                                                                               FILE* file, 
+                                                                               int indent = 0) {
+        t.dump(file, indent);
+    }
+
+    static void dump_(int a, FILE* file, int indent = 0) {
+        fprintf(file, "%*sint (%p) = %d\n", indent, "", &a, a);
+    }
+
+    static void dump_(long long a, FILE* file, int indent = 0) {
+        fprintf(file, "%*slong long (%p) = %lld\n", indent, "", &a, a);
+    }
+
+    static void dump_(const char* a, FILE* file, int indent = 0) {
+        fprintf(file, "%*sconst char* (%p) = \"%s\"\n", indent, "", a, a);
+    }
+
+    static void dump_(double a, FILE* file, int indent = 0) {
+        fprintf(file, "%*sdouble (%p) = %g\n", indent, "", &a, a);
+    }
+
+    static void dump_(long unsigned a, FILE* file, int indent = 0) {
+        fprintf(file, "%*slong unsigned (%p) = %lu\n", indent, "", &a, a);
     }
 
 
@@ -256,8 +304,8 @@ public:
         data_(first_free_index_) = T(std::forward<Args>(args)...);
         
         auto next_free_index = next_index_(first_free_index_);
-
         next_index_(first_free_index_) = 0;
+
         if (*tail_index_) {
             prev_index_(first_free_index_) = *tail_index_;
             next_index_(*tail_index_) = first_free_index_;
@@ -269,6 +317,33 @@ public:
 
         *tail_index_ = first_free_index_;
         first_free_index_ = next_free_index;
+        prev_index_(first_free_index_) = 0;
+
+        ++size_;
+    }
+
+
+    template <typename... Args>
+    void emplace_front(Args&&... args) {
+        expand_if_necessary_();
+
+        data_(first_free_index_) = T(std::forward<Args>(args)...);
+        
+        auto next_free_index = next_index_(first_free_index_);
+        prev_index_(first_free_index_) = 0;
+        
+        if (*head_index_) {
+            next_index_(first_free_index_) = *head_index_;
+            prev_index_(*head_index_) = first_free_index_;
+        }
+        else {
+            next_index_(first_free_index_) = 0;
+            *tail_index_ = first_free_index_;
+        }
+
+        *head_index_ = first_free_index_;
+        first_free_index_ = next_free_index;
+        prev_index_(first_free_index_) = 0;
 
         ++size_;
     }
@@ -444,7 +519,47 @@ public:
     }
 
 
-    //sorts nodes in list by the distance to the head
+    void dump(FILE* file = nullptr) const {
+        if (!file)
+            file = fopen("list_dump", "w");
+
+        fprintf(file, "List at %p = {\n"
+                      "  size_ (%p) = %zu\n"
+                      "  head_index_ (%p) = %zu\n"
+                      "  tail_index_ (%p) = %zu\n"
+                      "  first_free_index_ (%p) = %zu\n"
+                      "  buffer_ptr_ = %p\n", this,
+                &size_, size_, head_index_, *head_index_, tail_index_, *tail_index_,
+                &first_free_index_, first_free_index_, buffer_ptr_);
+
+        fprintf(file, "\n  Used nodes: {\n");
+        for (size_t index = *head_index_; index; index = next_index_(index)) {
+            fprintf(file, "    Node at %p with index %zu {\n"
+                          "      next = %zu\n"
+                          "      prev = %zu\n"
+                          "      data = {\n", 
+                    &node_at_(index), index, next_index_(index), prev_index_(index));
+            
+            dump_(data_(index), file, 8);
+            fprintf(file, "      }\n    }\n");
+        }
+
+        fprintf(file, "  }\n  Trash nodes: {\n");
+        for (size_t index = first_free_index_; index; index = next_index_(index)) {
+            fprintf(file, "    Node at %p with index %zu {\n"
+                          "      next = %zu\n"
+                          "      prev = %zu\n    }", 
+                    &node_at_(index), index, next_index_(index), prev_index_(index));
+            
+            fprintf(file, "\n");
+        }
+
+        fprintf(file, "  }\n}\n");
+
+    }
+
+
+    //sorts nodes in list by the distance to the head, so using indices is __fast__ and __correct__
     void pull() {
         std::vector<Block>* new_buffer_ptr = new std::vector<Block>(buffer_ptr_->size());
         size_t i = 1;
