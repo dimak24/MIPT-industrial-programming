@@ -25,106 +25,17 @@ static inline void make_fin(char* buf) {
 }
 
 
-static void parse_push(char* args_buf, FILE* out, size_t line) {
-    static char msg[1024];
+static void parse_push_pop(size_t command, char* args_buf, FILE* out, size_t line) {
     char* st = args_buf;
     shift(st);
 
-    if (*st == 'r') {
-        for (double k = 0; k < REGISTERS_NAMES.size(); ++k)
-            if (!strcmp(st, REGISTERS_NAMES[k])) {
-                fwrite(new double(1.0), sizeof(double), 1, out);
-                fwrite(&k, sizeof(double), 1, out);
-                break;
-            }
-            else if (k == REGISTERS_NAMES.size() - 1) {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                    STYLE("0") " register \"%s\" not found\n", line, st);
-                throw proc_exception(msg);
-            }
-    }
-    else if (*st == '[') {
-        size_t index = 0;
-        ++st;
-        shift(st);
-        
-        if (*st == 'r') {
-            for (unsigned char k = 0; k < REGISTERS_NAMES.size(); ++k) {
-                if (!strncmp(st, REGISTERS_NAMES[k], 3)) {
-                    index = k + 1;
-                    st += 3;
-                    break;
-                }
-                else if (k == REGISTERS_NAMES.size() - 1) {
-                    snprintf(msg, sizeof(msg), 
-                        STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                        STYLE("0") " register \"%s\" not found\n", line, st);
-                    throw proc_exception(msg);
-                }
-            }
-
-            shift(st);
-
-            if (*st == ']') {
-                double double_index = index;
-                fwrite(new double(2.0), sizeof(double), 1, out);
-                fwrite(&double_index, sizeof(double), 1, out);
-                return;
-            }
-            else if (*st != '+') {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                    STYLE("0") " wrong argument\n", line);
-                throw proc_exception(st);
-            }
-            ++st;
+    if (!*st) 
+        if (command == CMD_POP) {
+            fwrite(new double(0.0), sizeof(double), 1, out);
+            fwrite(new double(0.0), sizeof(double), 1, out);
         }
-
-        shift(st);
-        char* end = nullptr;
-        unsigned long int arg = strtoul(st, &end, 10);
-
-        shift(end);
-        if (*end != ']') {
-            snprintf(msg, sizeof(msg), 
-                STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                STYLE("0") " wrong argument\n", line);
-            throw proc_exception(st);
-        }
-
-        index += arg * (__REGISTERS_NUMBER__ + 1);
-        
-        double double_index = index;
-        fwrite(new double(2.0), sizeof(double), 1, out);
-        fwrite(&double_index, sizeof(double), 1, out);
-    }
-    else {
-        char* end = nullptr;
-        double arg = strtod(st, &end);
-        shift(end);
-        if (*end) {
-            snprintf(msg, sizeof(msg), 
-                STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                STYLE("0") " wrong arument\n", line);
-            throw proc_exception(msg);
-        }
-
-        fwrite(new double(0.0), sizeof(double), 1, out);
-        fwrite(&arg, sizeof(double), 1, out);
-    }
-}
-
-
-static void parse_pop(char* args_buf, FILE* out, size_t line) {
-    static char msg[1024];
-    char* st = args_buf;
-    shift(st);
-
-    if (!*st) {
-        fwrite(new double(0.0), sizeof(double), 1, out);
-        fwrite(new double(0.0), sizeof(double), 1, out);
-    }
+        else
+            throw asm_exception(line, "PUSH: no arguments (need 1)");
     else if (*st == 'r') {
         for (double k = 0; k < REGISTERS_NAMES.size(); ++k)
             if (!strcmp(st, REGISTERS_NAMES[k])) {
@@ -132,33 +43,23 @@ static void parse_pop(char* args_buf, FILE* out, size_t line) {
                 fwrite(&k, sizeof(double), 1, out);
                 break;
             }
-            else if (k == REGISTERS_NAMES.size() - 1) {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                    STYLE("0") " register \"%s\" not found\n", line, st);
-                throw proc_exception(msg);
-            }
+            else if (k == REGISTERS_NAMES.size() - 1)
+                throw asm_exception(line, get_string("register \"%s\" not found", st));
     }
     else if (*st == '[') {
         size_t index = 0;
-
         ++st;
         shift(st);
         
         if (*st == 'r') {
-            for (unsigned char k = 0; k < REGISTERS_NAMES.size(); ++k) {
+            for (unsigned char k = 0; k < REGISTERS_NAMES.size(); ++k)
                 if (!strncmp(st, REGISTERS_NAMES[k], 3)) {
                     index = k + 1;
                     st += 3;
                     break;
                 }
-                else if (k == REGISTERS_NAMES.size() - 1) {
-                    snprintf(msg, sizeof(msg), 
-                        STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                        STYLE("0") " register \"%s\" not found\n", line, st);
-                    throw proc_exception(msg);
-                }
-            }
+                else if (k == REGISTERS_NAMES.size() - 1)
+                    throw asm_exception(line, get_string("register \"%s\" not found", st));
 
             shift(st);
 
@@ -168,12 +69,8 @@ static void parse_pop(char* args_buf, FILE* out, size_t line) {
                 fwrite(&double_index, sizeof(double), 1, out);
                 return;
             }
-            else if (*st != '+') {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                    STYLE("0") " wrong argument\n", line);
-                throw proc_exception(st);
-            }
+            else if (*st != '+')
+                throw asm_exception(line, "wrong argument (access to RAM must be of form [rax+1])");
             ++st;
         }
 
@@ -182,12 +79,8 @@ static void parse_pop(char* args_buf, FILE* out, size_t line) {
         unsigned long int arg = strtoul(st, &end, 10);
 
         shift(end);
-        if (*end != ']') {
-            snprintf(msg, sizeof(msg), 
-                STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                STYLE("0") " wrong argument\n", line);
-            throw proc_exception(st);
-        }
+        if (*end != ']')
+            throw asm_exception(line, "wrong argument (access to RAM must be of form [rax+1])");
 
         index += arg * (__REGISTERS_NUMBER__ + 1);
         
@@ -195,36 +88,39 @@ static void parse_pop(char* args_buf, FILE* out, size_t line) {
         fwrite(new double(2.0), sizeof(double), 1, out);
         fwrite(&double_index, sizeof(double), 1, out);
     }
+    else if (command == CMD_PUSH) {
+        char* end = nullptr;
+        double arg = strtod(st, &end);
+        shift(end);
+        if (*end)
+            throw asm_exception(line, "wrong argument (expected double)");
+
+        fwrite(new double(0.0), sizeof(double), 1, out);
+        fwrite(&arg, sizeof(double), 1, out);
+    }
+    else
+        throw asm_exception(line, "POP: wrong argument format");
 }
 
 
 static void parse_jump(char* args_buf, FILE* out, size_t line, auto& labels) {
-    static char msg[1024];
     char* st = args_buf;
     shift(st);
 
-    if (*st != ':') {
-        snprintf(msg, sizeof(msg), 
-            STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-            STYLE("0") " wrong arument\n", line);
-        throw proc_exception(msg);
-    }
+    if (*st != ':')
+        throw asm_exception(line, "wrong arument (label has to begin with \":\")");
 
     ++st;
     shift(st);
-    if (!labels[st]) {
-        snprintf(msg, sizeof(msg), 
-            STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-            STYLE("0") " label %s not found\n", line, st);
-        throw proc_exception(msg);
-    }
+    if (!labels[st])
+        throw asm_exception(line, get_string("label %s not found", st));
 
     double tmp = labels[st] - 1 + strlen(SGN);
     fwrite(&tmp, sizeof(double), 1, out);
 }
 
 
-static void parse_func(char* args_buf, FILE* out, auto& funcs) {
+static void parse_func(char* args_buf, FILE* out, auto& funcs) noexcept {
     char* st = args_buf;
     shift(st);
 
@@ -234,16 +130,11 @@ static void parse_func(char* args_buf, FILE* out, auto& funcs) {
 
 
 static void parse_call(char* args_buf, FILE* out, size_t line, auto& funcs) {
-    static char msg[1024];
     char* st = args_buf;
     shift(st);
 
-    if (!funcs[st].first) {
-        snprintf(msg, sizeof(msg), 
-            STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-            STYLE("0") " function %s not found\n", line, st);
-        throw proc_exception(msg);
-    }
+    if (!funcs[st].first)
+        throw asm_exception(line, get_string("function %s not found", st));
 
     double tmp = funcs[st].first - 1 + strlen(SGN);
     fwrite(&tmp, sizeof(double), 1, out);
@@ -251,13 +142,10 @@ static void parse_call(char* args_buf, FILE* out, size_t line, auto& funcs) {
 
 
 static void parse(unsigned char command, char* args_buf, FILE* out, size_t line, auto& labels, auto& funcs) {
-    static char msg[1024];
     make_fin(args_buf);
 
-    if (command == CMD_PUSH)
-        parse_push(args_buf, out, line);
-    else if (command == CMD_POP)
-        parse_pop(args_buf, out, line);
+    if (command == CMD_PUSH || command == CMD_POP)
+        parse_push_pop(command, args_buf, out, line);
     else if (command == CMD_JMP || 
              command == CMD_JA || command == CMD_JB || command == CMD_JNE ||
              command == CMD_JAE || command == CMD_JBE || command == CMD_JE)
@@ -275,12 +163,8 @@ static void parse(unsigned char command, char* args_buf, FILE* out, size_t line,
             char* end = nullptr;
             double arg = strtod(cur, &end);
 
-            if (*end && *end != ' ') {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:" 
-                    STYLE("0") " wrong arument (expected double)\n", line);
-                throw proc_exception(msg);
-            }
+            if (*end && *end != ' ')
+                throw asm_exception(line, "wrong arument (expected double)");
             
             fwrite(&arg, sizeof(double), 1, out);
             cur += sizeof(double);

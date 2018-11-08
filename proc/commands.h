@@ -28,7 +28,7 @@ DEF_CMD(END, 0, {
 })
 
 DEF_CMD(PUSH, 2, {
-    let reg = (int)args[1] % (__REGISTERS_NUMBER__ + 1) - 1;
+    let reg   = (int)args[1] % (__REGISTERS_NUMBER__ + 1) - 1;
     let shift = (int)args[1] / (__REGISTERS_NUMBER__ + 1);
     args[0] == 0 ? PUSH(args[1]) : 
     args[0] == 1 ? PUSH_REG(args[1]) :

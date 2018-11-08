@@ -1,6 +1,5 @@
 
 #include "processor.h"
-#include "reader.h"
 #include "parser.h"
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +11,6 @@
 
 
 void get_labels(FILE* file, auto& labels) {
-    static char msg[1024];
     labels.clear();
 
     char* buf = nullptr;
@@ -27,12 +25,8 @@ void get_labels(FILE* file, auto& labels) {
 
         if (buf[0] == ':') {
             ++buf;
-            if (labels[buf]) {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
-                    STYLE("0") " label \"%s\" redefinition\n", line, buf);
-                throw proc_exception(msg);
-            }
+            if (labels[buf])
+                throw asm_exception(line, get_string("label \"%s\" redefinition", buf));
             labels[buf] = ip_shift;
         }
         else {
@@ -50,7 +44,6 @@ void get_labels(FILE* file, auto& labels) {
 }
 
 void get_funcs(FILE* file, auto& funcs) {
-    static char msg[1024];
     funcs.clear();
 
     char* buf = nullptr;
@@ -73,36 +66,23 @@ void get_funcs(FILE* file, auto& funcs) {
         if (!strcmp(buf, "FUNC")) {
             buf = ch + 1;
             shift(buf);
-            if (!balance) {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
-                    STYLE("0") " function definition inside another function is permitted\n", line);
-                throw proc_exception(msg);
-            }
-            if (!*buf) {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
-                    STYLE("0") " function name not found\n", line);
-                throw proc_exception(msg);
-            }
-            if (funcs[buf].first) {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
-                    STYLE("0") " function \"%s\" redefinition\n", line, buf);
-                throw proc_exception(msg);
-            }
+            
+            if (!balance)
+                throw asm_exception(line, "function definition inside another function is permitted");
+            if (!*buf)
+                throw asm_exception(line, "function's name not found");
+            if (funcs[buf].first)
+                throw asm_exception(line, get_string("function \"%s\" redefinition", buf));
+
             ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[CMD_FUNC];
             funcs[buf].first = ip_shift;
             cur_func_name = buf;
             balance = false;
         }
         else if (!strcmp(buf, "ENDFUNC")) {
-            if (balance) {
-                snprintf(msg, sizeof(msg), 
-                    STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
-                    STYLE("0") " no one function could be finished here\n", line);
-                throw proc_exception(msg);
-            }
+            if (balance)
+                throw asm_exception(line, "no function to terminate here");
+
             ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[CMD_ENDFUNC];
             funcs[cur_func_name].second = ip_shift;
             balance = true;
@@ -112,15 +92,11 @@ void get_funcs(FILE* file, auto& funcs) {
                 if (!strcmp(buf, COMMANDS_NAMES[i])) {
                     ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[i];
                     break;
-            }
+                }
     }
 
-    if (!balance) {
-        snprintf(msg, sizeof(msg), 
-            STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
-            STYLE("0") " some functions are not finished\n", ++line);
-        throw proc_exception(msg);
-    }
+    if (!balance)
+        throw asm_exception(++line, "some functions are not terminated");
 }
 
 
@@ -153,8 +129,10 @@ int main(int argc, char** argv) {
 
             get_funcs(raw, funcs);
             fseek(raw, 0, SEEK_SET);
-        } catch (proc_exception& e) {
-            fprintf(stderr, "%s", e.what());
+        } catch (asm_exception& e) {
+            fprintf(stderr, STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n"
+                        "    line %zu: " STYLE("0") "%s\n", 
+                    e.line, e.what());
             remove(filename);
             exit(1);   
         }
@@ -169,7 +147,7 @@ int main(int argc, char** argv) {
             while (getline(&buf, &nbuf, raw) > 0) {
                 ++line;
                 shift(buf);
-                if (buf[0] == ':')
+                if (buf[0] == ':' || buf[0] == '#' || buf[0] == '\n')
                     continue;
                 char* ch = buf;
                 char* fin = buf + strlen(buf) - 1;
@@ -182,16 +160,13 @@ int main(int argc, char** argv) {
                         parse(i, ch + 1, compiled, line, labels, funcs);
                         break;
                     }
-                    else if (i == COMMANDS_NAMES.size() - 1) {
-                        char msg[1024];
-                        snprintf(msg, sizeof(msg), 
-                            STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n    line %zu:"
-                            STYLE("0") " command \"%s\" not found\n", line, buf);
-                        throw proc_exception(msg);
-                    }
+                    else if (i == COMMANDS_NAMES.size() - 1)
+                        throw asm_exception(line, get_string("command \"%s\" not found", buf));
             }
-        } catch (proc_exception& e) {
-            fprintf(stderr, "%s", e.what());
+        } catch (asm_exception& e) {
+            fprintf(stderr, STYLE("1") "asm: " STYLE("31") "error:" STYLE("39") "\n"
+                        "    line %zu: " STYLE("0") "%s\n", 
+                    e.line, e.what());
             remove(filename);
             exit(1);
         } 

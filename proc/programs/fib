@@ -1,0 +1,32 @@
+
+  # function fib replaces top element in the stack with the n-th fibonacci number
+
+FUNC fib
+PUSH 1
+JBE :1
+POP
+POP rax 
+PUSH rax #n
+PUSH 2
+SUB #n-2
+PUSH rax
+DEC # n-2, n-1, rax is free
+CALL fib # n-2, fib(n-1)
+POP rbx
+POP rcx
+PUSH rbx
+PUSH rcx # fib(n-1), n-2
+CALL fib # fib(n-1),fib(n - 2)
+ADD   #fib(n)
+JMP :end
+:1
+POP
+POP
+PUSH 1
+:end
+ENDFUNC
+:while(0)
+IN
+CALL fib
+OUT
+JMP :while(0)

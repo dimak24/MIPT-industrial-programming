@@ -25,9 +25,11 @@ int main(int argc, char** argv) {
     std::tie(prog, size) = read_text(argv[1]);
 
     try {
-        verify(prog, size, "proc");
-    } catch (proc_exception& e) {
-        fprintf(stderr, "%s", e.what());
+        verify(prog, size);
+    } catch (verificator_exception& e) {
+        fprintf(stderr, STYLE("1") "proc: " STYLE("31") "error:" STYLE("39") "\n"
+                        "    byte %zu: " STYLE("0") "%s\n", 
+                e.byte, e.what());
         exit(1);
     }
 

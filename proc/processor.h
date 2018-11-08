@@ -16,13 +16,44 @@
     } while(0)
 
 
-struct proc_exception : public std::exception {
-    const char* msg;
+template <typename... Args>
+std::string get_string(const char* format, Args&&... args) {
+    int size = snprintf(nullptr, 0, format, std::forward<Args>(args)...);
+    char* msg = new char[size];
+        
+    snprintf(msg, size, format, std::forward<Args>(args)...);
+    std::string ans(msg, size);
 
-    proc_exception(const char* msg) : msg(msg) {}
+    delete[] msg;
+
+    return ans;
+}
+
+
+struct verificator_exception : public std::exception {
+    std::string msg;
+    size_t byte;
+
+
+    verificator_exception(size_t byte, std::string msg) 
+        : msg(msg), byte(byte) {}
 
     virtual const char* what() {
-        return msg;
+        return msg.c_str();
+    }
+};
+
+
+struct asm_exception : public std::exception {
+    std::string msg;
+    size_t line;
+
+
+    asm_exception(size_t line, std::string msg)
+        : msg(msg), line(line) {}
+
+    virtual const char* what() {
+        return msg.c_str();
     }
 };
 
