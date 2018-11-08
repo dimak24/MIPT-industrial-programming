@@ -54,11 +54,9 @@ private:
 
     void expand_if_necessary_() {
         if (!first_free_index_) {
-        // std::cout << "BEFORE EXPAND: " << data_ptr_(1) << "\n"; 
             buffer_ptr_->push_back(Block{});
             init_block_(buffer_ptr_->size() - 1);
             first_free_index_ = (buffer_ptr_->size() - 1) * __BLOCK_SIZE__;
-        // std::cout << "AFTER EXPAND: " << data_ptr_(1) << "\n";
         }
     }
 
