@@ -189,6 +189,86 @@ private:
     }
 
 
+
+    template <typename ValueType>
+    class ListIterator : public std::iterator<std::bidirectional_iterator_tag,
+                                              T, 
+                                              std::ptrdiff_t, 
+                                              ValueType*, 
+                                              ValueType&> {
+        friend class List;
+    private:
+        std::vector<Block>* buffer_ptr_;
+        size_t* head_index_;
+        size_t* tail_index_;
+
+        size_t index_;
+
+
+    public:
+        ListIterator(std::vector<Block>* buffer_ptr, size_t* head_index, size_t* tail_index, size_t index)
+            : buffer_ptr_(buffer_ptr), head_index_(head_index), tail_index_(tail_index), index_(index) {}
+
+
+        ListIterator()
+            : buffer_ptr_(nullptr) {}
+
+
+        ListIterator(const ListIterator&) = default;
+
+
+        ~ListIterator() {}
+
+
+        bool operator==(const ListIterator& another) const {
+            return buffer_ptr_ == another.buffer_ptr_ && index_ == another.index_;
+        }
+
+
+        bool operator!=(const ListIterator& another) const {
+            return !(*this == another);
+        }
+
+
+        ListIterator& operator++() {
+            index_ = index_ ? (*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].next
+                            : *head_index_;
+            return *this;
+        }
+
+
+        ListIterator& operator++(int) const {
+            ListIterator copy(*this);
+            ++*this;
+            return copy;
+        }
+
+
+        ListIterator& operator--() {
+            index_ = index_ ? (*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].prev 
+                            : *tail_index_;
+            return *this;
+        }
+
+
+        ListIterator& operator--(int) const {
+            ListIterator copy(*this);
+            --*this;
+            return copy;
+        }
+
+
+        ValueType* operator->() const {
+            return &((*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].data);
+        }
+
+
+        ValueType& operator*() const {
+            return (*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].data;
+        }
+    };
+
+
 public:
     List()
         : buffer_ptr_(new std::vector<Block>(1)), size_(0), 
@@ -358,85 +438,6 @@ public:
         return size_ == 0;
     }
 
-
-
-    template <typename ValueType>
-    class ListIterator : public std::iterator<std::bidirectional_iterator_tag,
-                                              T, 
-                                              std::ptrdiff_t, 
-                                              ValueType*, 
-                                              ValueType&> {
-        friend class List;
-    private:
-        std::vector<Block>* buffer_ptr_;
-        size_t* head_index_;
-        size_t* tail_index_;
-
-        size_t index_;
-
-
-    public:
-        ListIterator(std::vector<Block>* buffer_ptr, size_t* head_index, size_t* tail_index, size_t index)
-            : buffer_ptr_(buffer_ptr), head_index_(head_index), tail_index_(tail_index), index_(index) {}
-
-
-        ListIterator()
-            : buffer_ptr_(nullptr) {}
-
-
-        ListIterator(const ListIterator&) = default;
-
-
-        ~ListIterator() {}
-
-
-        bool operator==(const ListIterator& another) const {
-            return buffer_ptr_ == another.buffer_ptr_ && index_ == another.index_;
-        }
-
-
-        bool operator!=(const ListIterator& another) const {
-            return !(*this == another);
-        }
-
-
-        ListIterator& operator++() {
-            index_ = index_ ? (*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].next
-                            : *head_index_;
-            return *this;
-        }
-
-
-        ListIterator& operator++(int) const {
-            ListIterator copy(*this);
-            ++*this;
-            return copy;
-        }
-
-
-        ListIterator& operator--() {
-            index_ = index_ ? (*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].prev 
-                            : *tail_index_;
-            return *this;
-        }
-
-
-        ListIterator& operator--(int) const {
-            ListIterator copy(*this);
-            --*this;
-            return copy;
-        }
-
-
-        ValueType* operator->() const {
-            return &((*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].data);
-        }
-
-
-        ValueType& operator*() const {
-            return (*buffer_ptr_)[index_ / __BLOCK_SIZE__][index_ % __BLOCK_SIZE__].data;
-        }
-    };
 
 
     using iterator = ListIterator<T>;
