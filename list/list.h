@@ -1,4 +1,4 @@
-#include <vector>
+ #include <vector>
 #include <array>
 #include <iterator>
 #include <cassert>

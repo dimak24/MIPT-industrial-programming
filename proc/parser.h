@@ -17,10 +17,12 @@ static inline void make_fin(char* buf) {
     char* endl = strchr(buf, '\n');
     char* last = (comment ? comment : endl ? endl : buf + strlen(buf));
     *last = 0;
-    --last;
-    while (last != buf && *last == ' ') {
-        *last = 0;
+    if (last != buf) {
         --last;
+        while (last != buf && *last == ' ') {
+            *last = 0;
+            --last;
+        }
     }
 }
 

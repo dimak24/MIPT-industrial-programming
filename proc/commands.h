@@ -73,6 +73,11 @@ DEF_CMD(MOD, 0, {
     PUSH(fmod(b, a));
 })
 
+DEF_CMD(ABS, 0, {
+    let a = POP();
+    PUSH(ABS(a));
+})
+
 DEF_CMD(IN, 0, {
     let a = READ();
     PUSH(a);
@@ -152,6 +157,12 @@ DEF_CMD(SQR, 0, {
     PUSH(a * a);
 })
 
+DEF_CMD(POW, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH(pow(b, a));
+})
+
 DEF_CMD(SIN, 0, {
     PUSH(sin(POP()));
 })
@@ -160,12 +171,44 @@ DEF_CMD(COS, 0, {
     PUSH(cos(POP()));
 })
 
+DEF_CMD(TG, 0, {
+    PUSH(tan(POP()));
+})
+
 DEF_CMD(ARCSIN, 0, {
     PUSH(asin(POP()));
 })
 
 DEF_CMD(ARCCOS, 0, {
     PUSH(acos(POP()));
+})
+
+DEF_CMD(ARCTG, 0, {
+    PUSH(atan(POP()));
+})
+
+DEF_CMD(SH, 0, {
+    PUSH(sinh(POP()));
+})
+
+DEF_CMD(CH, 0, {
+    PUSH(cosh(POP()));
+})
+
+DEF_CMD(TH, 0, {
+    PUSH(tanh(POP()));
+})
+
+DEF_CMD(ARCSH, 0, {
+    PUSH(asinh(POP()));
+})
+
+DEF_CMD(ARCCH, 0, {
+    PUSH(acosh(POP()));
+})
+
+DEF_CMD(ARCTH, 0, {
+    PUSH(atanh(POP()));
 })
 
 DEF_CMD(CALL, 1, {
@@ -197,3 +240,8 @@ DEF_CMD(DRAW, 3, {
 #undef READ
 #undef WRITE
 #undef let
+#undef EPS
+#undef ABS
+#undef LESS
+#undef EQUAL
+#undef GRT
