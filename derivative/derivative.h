@@ -5,15 +5,12 @@
 #include <cstdlib>
 #include <algorithm>
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <vector>
 
 
 
-#define L *node.left
-#define R *node.right
-#define dL derivative(L)
-#define dR derivative(R)
-#define cL Node(L)
-#define cR Node(R)
 #define IS_OP(node) ((node).data.type == NodeType::NODE_OP)
 #define IS_VAR(node) ((node).data.type == NodeType::NODE_VAR)
 #define IS_CONST(node) ((node).data.type == NodeType::NODE_CONST)
@@ -22,7 +19,6 @@
 #define VALUE(node) (std::get<double>((node).data.value))
 #define EPS 1e-5
 #define EQUAL(value1, value2) (fabs((value1) - (value2)) < EPS)
-
 
 
 struct derivative_exception : public std::exception {
@@ -41,7 +37,8 @@ enum Operator {
     OP_PLUS,
     OP_MINUS,
     OP_MUL,
-    OP_DIV
+    OP_DIV,
+    OP_POW
 };
 
 
@@ -148,9 +145,30 @@ Node operator/(const Node& left, const Node& right) {
     return Node(new Node(left), NodeData{NodeType::NODE_OP, Operator::OP_DIV}, new Node(right));
 }
 
+Node operator^(const Node& left, const Node& right) {
+    if (IS_CONST(left) && IS_CONST(right))
+        return Node(nullptr, NodeData{NodeType::NODE_CONST, pow(VALUE(left), VALUE(right))}, nullptr);
+
+    if (IS_CONST(left) && EQUAL(VALUE(left), 0))
+        return Node(nullptr, {NodeType::NODE_CONST, 0}, nullptr);
+
+    if ((IS_CONST(right) && EQUAL(VALUE(right), 0)) || (IS_CONST(left) && EQUAL(VALUE(left), 1)))
+        return Node(nullptr, {NodeType::NODE_CONST, 1}, nullptr);
+
+    return Node(new Node(left), NodeData{NodeType::NODE_OP, Operator::OP_POW}, new Node(right));
+
+}
+
 
 
 Node derivative(const Node& node) {
+#define L *node.left
+#define R *node.right
+#define dL derivative(L)
+#define dR derivative(R)
+#define cL Node(L)
+#define cR Node(R)
+
     if (IS_CONST(node))
         return Node(nullptr, NodeData{NodeType::NODE_CONST, 0}, nullptr);
     if (IS_VAR(node))
@@ -164,9 +182,21 @@ Node derivative(const Node& node) {
             return dL * cR + cL * dR;
         case Operator::OP_DIV:
             return (dL * cR - cL * dR) / (cR * cR);
+        case Operator::OP_POW:
+            if (IS_CONST(R))
+                return R * (L ^ Node(nullptr, {NodeType::NODE_CONST, VALUE(R) - 1}, nullptr));
+            else /* coming soon */
+                throw derivative_exception();
         default:
             throw derivative_exception();
     }
+
+#undef cR
+#undef cL
+#undef dR
+#undef dL
+#undef R
+#undef L
 }
 
 
@@ -188,6 +218,9 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
                 break;
             case OP_DIV:
                 value = "/";
+                break;
+            case OP_POW:
+                value = "^";
                 break;
             default:
                 throw derivative_exception();
@@ -262,7 +295,7 @@ Node deserialize(const char* expression, char var = 'x') {
         }
         else if (*ch == var /* is var */)                                                                           // TODO
             node->data = NodeData{NodeType::NODE_VAR, Variable::VAR_X};
-        else if (*ch == '+' || *ch == '-' || *ch == '*' || *ch == '/') {
+        else if (*ch == '+' || *ch == '-' || *ch == '*' || *ch == '/' || *ch == '^') {
             switch (*ch) {
                 case '+':
                     node->data = NodeData{NodeType::NODE_OP, Operator::OP_PLUS};
@@ -275,6 +308,9 @@ Node deserialize(const char* expression, char var = 'x') {
                     break;
                 case '/':
                     node->data = NodeData{NodeType::NODE_OP, Operator::OP_DIV};
+                    break;
+                case '^':
+                    node->data = NodeData{NodeType::NODE_OP, Operator::OP_POW};
                     break;
                 default:
                     throw derivative_exception();
@@ -294,13 +330,26 @@ Node deserialize(const char* expression, char var = 'x') {
 }
 
 
-Node deserialize(std::string expression) {
-    return deserialize(expression.c_str());
+Node deserialize(std::string expression, char var = 'x') {
+    return deserialize(expression.c_str(), var);
+}
+
+std::string eat_extra_zeros(const std::string& expression) {
+    auto point = expression.find('.');
+    if (point == std::string::npos)
+        return expression;
+    unsigned end = expression.size() - 1;
+    for (; end >= point; --end)
+        if (expression[end] != '0')
+            break;
+    if (expression[end] == '.')
+        --end;
+    return expression.substr(0, end + 1);
 }
 
 
 
-std::string serialize(Node root) {
+std::string serialize(const Node& root) {
     std::string ans = "( ";
     if (root.left) {
         ans += serialize(*root.left);
@@ -316,6 +365,9 @@ std::string serialize(Node root) {
                 break;
             case Operator::OP_DIV:
                 ans += " / ";
+                break;
+            case Operator::OP_POW:
+                ans += " ^ ";
                 break;
             default:
                 throw derivative_exception();
@@ -338,79 +390,187 @@ std::string serialize(Node root) {
         }
     }
     else /* IS_CONST(root) */ { 
-        ans += std::to_string(VALUE(root));
+        ans += eat_extra_zeros(std::to_string(VALUE(root)));
     }
     return ans + " )";
 }
 
 
-char find_nearest_op(const std::string& str, unsigned index) {
-    while (index < str.size()) {
-        if (str[index] == '+' || str[index] == '-' || str[index] == '*' || str[index] == '/')
-            return str[index];
-        ++index;
-    }
-    throw derivative_exception();
-}
+std::string to_latex(const Node& root) {
+    if (IS_CONST(root))
+        return eat_extra_zeros(std::to_string(VALUE(root)));
+    if (IS_VAR(root))
+        switch (VAR(root)) {
+            case Variable::VAR_X:
+                return "x";
+            case Variable::VAR_Y:
+                return "y";
+            case Variable::VAR_Z:
+                return "z";
+            default:
+                throw derivative_exception(); 
+        }
 
-unsigned find_closing_paranthesys(const std::string& expression, unsigned opening) {
-    unsigned balance = 0;
-    for (unsigned i = opening; i < expression.size(); ++i) {
-        if (expression[i] == '(')
-            ++balance;
-        else if (expression[i] == ')')
-            --balance;
-        if (!balance)
-            return i;
-    }
-    throw derivative_exception();
-}
+    std::string left  = root.left ? to_latex(*root.left) : "",
+                right = root.right ? to_latex(*root.right) : "";
 
-std::string reduce_zero(std::string str) {
-    unsigned j = str.size() - 1;
-    for (; j >= 0; --j)
-        if (str[j] == '.')
+
+    if (OP(root) == Operator::OP_DIV)
+        return "\\frac{" + left + "}{" + right + "}";
+
+
+    if (OP(root) == Operator::OP_POW) {
+        if (!IS_OP(*root.left))
+            return left + "^{" + right + "}";
+        return "(" + left + ")^{" + right + "}";
+    }
+
+    std::string ans = "";
+
+
+    if (IS_OP(*root.left) && OP(root) != Operator::OP_PLUS && OP(root) != Operator::OP_MINUS &&
+        OP(*root.left) != Operator::OP_DIV)
+        ans += "\\left(" + left + "\\right)";
+    else if (IS_CONST(*root.left) && EQUAL(VALUE(*root.left), 0));
+        // replace "0-" with "-"
+    else
+        ans += left;
+
+    switch (OP(root)) {
+        case Operator::OP_PLUS:
+            ans += "+";
             break;
-    return str.substr(0, j);
-}
-
-
-std::string reduce_parantheses(std::string expression) {
-    if (expression[0] == '(') {
-        unsigned j = find_closing_paranthesys(expression, 0);
-        if (j == expression.size() - 1)
-            return reduce_parantheses(expression.substr(1, expression.size() - 2));
-
-        std::string left = reduce_parantheses(expression.substr(1, j - 1));
-        char op = find_nearest_op(expression, j);
-        for (; j < expression.size(); ++j)
-            if (expression[j] == '(')
-                break;
-            else if (j == expression.size() - 1)
-                throw derivative_exception();
-        unsigned k = find_closing_paranthesys(expression, j);
-        std::string right = reduce_parantheses(expression.substr(j + 1, k - j - 1));
-        if (op == '+')
-            return left + "+" + right;
-        if (op == '-')
-            return left + "-(" + right + ")";
-        if (op == '*')
-            return "(" + left + ")(" + right + ")";
-        if (op == '/')
-            return "\\frac{" + left + "}{" + right + "}";
-        throw derivative_exception();
+        case Operator::OP_MINUS:
+            ans += "-";
+            break;
+        case Operator::OP_MUL:
+            ans += "*";
+            break;
+        default:
+            throw derivative_exception();
     }
-    if (expression[0] == '0' && EQUAL(std::atof(expression.c_str()), 0))
-        return "";
-    if (expression[0] == 'x')
-        return expression;
-    return reduce_zero(expression); 
+
+    if (IS_OP(*root.right) && OP(root) != Operator::OP_PLUS)
+        ans += "\\left(" + right + "\\right)";
+    else
+        ans += right;
+
+    return ans;
+}   
+
+
+std::string make_latex_math_expression(const std::string& latex_math_code) {
+    return "$" + latex_math_code + "$\n";
 }
 
 
-std::string to_latex(std::string expression) {
-    expression.erase(std::remove(expression.begin(), expression.end(), ' '), expression.end());
-    std::string ans = "\\documentclass{article}\n\\begin{document}\n$$";
-    ans += reduce_parantheses(expression);
-    return ans + "$$\n\\end{document}";
+std::string make_latex_document(const std::string& latex_code) {
+    std::string ans = "\\documentclass{article}\n"
+                      "\\usepackage[T1, T2A]{fontenc}\n"
+                      "\\usepackage[utf8]{inputenc}\n"
+                      "\\usepackage[russian]{babel}\n"
+                      "\\begin{document}\n";
+    ans += latex_code + "\n";
+    return ans + "\\end{document}";
 }
+
+
+
+
+// POEM
+
+
+
+namespace poem {
+
+const std::vector<std::string> linking_words = {
+    "Therefore",
+    "Easy to see that",
+    "Obviously",
+    "You may not believe, but",
+    "As a simple consequence of the foregoing",
+    "Notice, that",
+    "Using the basic rules of differentiation",
+    "We have",
+    "1488 ЛОГАРИФМЫ  БРАТ НЕ   БРОСИМ!!!!",
+    "Until suddenly everything ends",
+    "Do you really have nothing to do?"
+};
+
+
+Node derivative_poem_step(const Node& node, std::string& poem) {
+
+#define L *node.left
+#define R *node.right
+#define dL derivative_poem_step(L, poem)
+#define dR derivative_poem_step(R, poem)
+#define cL Node(L)
+#define cR Node(R)
+
+    if (IS_CONST(node))
+        return Node(nullptr, NodeData{NodeType::NODE_CONST, 0}, nullptr);
+    if (IS_VAR(node))
+        return Node(nullptr, NodeData{NodeType::NODE_CONST, 1}, nullptr);                                      // TODO
+    
+    switch (OP(node)) {
+        case Operator::OP_PLUS: {
+            auto ans = dL + dR;
+            poem += linking_words[rand() % linking_words.size()] + 
+                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
+                    to_latex(ans) + "$\n\n";
+            return ans;
+        }
+        case Operator::OP_MINUS: {
+            auto ans = dL - dR;
+            poem += linking_words[rand() % linking_words.size()] + 
+                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
+                    to_latex(ans) + "$\n\n";
+            return ans;
+        }
+        case Operator::OP_MUL: {
+            auto ans = dL * cR + cL * dR;
+            poem += linking_words[rand() % linking_words.size()] + 
+                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
+                    to_latex(ans) + "$\n\n";
+            return ans;
+        }
+        case Operator::OP_DIV: {
+            auto ans = (dL * cR - cL * dR) / (cR * cR);
+            poem += linking_words[rand() % linking_words.size()] + 
+                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
+                    to_latex(ans) + "$\n\n";
+            return ans;
+        }
+
+        case Operator::OP_POW: {
+            if (!IS_CONST(R)) /* coming soon */
+                throw derivative_exception();
+            
+            auto ans = R * (L ^ Node(nullptr, {NodeType::NODE_CONST, VALUE(R) - 1}, nullptr));
+            poem += linking_words[rand() % linking_words.size()] + 
+                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
+                    to_latex(ans) + "$\n\n";
+            return ans;
+        }
+        default:
+            throw derivative_exception();
+    }
+
+#undef cR
+#undef cL
+#undef dR
+#undef dL
+#undef R
+#undef L
+}
+
+
+std::string how_do_I_calculate_the_derivative_poem(const std::string& all_parantheses_expression) {
+    srand(time(0));
+    Node tree = deserialize(all_parantheses_expression);
+    std::string poem = "We are to differentiate:\n" + make_latex_math_expression(to_latex(tree)) + "\n";
+    derivative_poem_step(tree, poem);
+    return make_latex_document(poem);
+}
+
+} // namespace poem
