@@ -10,17 +10,6 @@
 #include <vector>
 
 
-
-#define IS_OP(node) ((node).data.type == NodeType::NODE_OP)
-#define IS_VAR(node) ((node).data.type == NodeType::NODE_VAR)
-#define IS_CONST(node) ((node).data.type == NodeType::NODE_CONST)
-#define OP(node) (std::get<Operator>((node).data.value))
-#define VAR(node) (std::get<Variable>((node).data.value))
-#define VALUE(node) (std::get<double>((node).data.value))
-#define EPS 1e-5
-#define EQUAL(value1, value2) (fabs((value1) - (value2)) < EPS)
-
-
 struct derivative_exception : public std::exception {
 
 };
@@ -38,11 +27,13 @@ enum Operator {
     OP_MINUS,
     OP_MUL,
     OP_DIV,
-    OP_POW
+    OP_POW,
+    OP_LN
 };
 
 
 enum NodeType {
+    NODE_UNDEFINED,
     NODE_VAR,
     NODE_OP,
     NODE_CONST
@@ -51,7 +42,7 @@ enum NodeType {
 
 struct NodeData {
     NodeType type;
-    std::variant<Variable, Operator, double> value;
+    std::variant<Variable, Operator, double> value = 0;
 };
 
 
@@ -77,8 +68,22 @@ struct Node {
           right(another.right ? new Node(*another.right) : nullptr),
           parent(nullptr) {}
 
+    Node& operator=(const Node& another) {
+        left = another.left ? new Node(*another.left) : nullptr;
+        data = another.data;
+        right = another.right ? new Node(*another.right) : nullptr;
+        parent = nullptr;
 
-    Node(Node* parent) : left(nullptr), right(nullptr), parent(parent) {}
+        return *this;
+    }
+
+    Node(Node* parent) 
+        : left(nullptr), 
+          data({NODE_UNDEFINED}),
+          right(nullptr), 
+          parent(parent) {}
+
+    Node() : Node(nullptr) {}
 
 
     ~Node() {
@@ -90,9 +95,31 @@ struct Node {
 };
 
 
+
+#define IS_OP(node) ((node).data.type == NodeType::NODE_OP)
+#define IS_VAR(node) ((node).data.type == NodeType::NODE_VAR)
+#define IS_CONST(node) ((node).data.type == NodeType::NODE_CONST)
+#define IS_UNDEFINED(node) ((node).data.type == NodeType::NODE_UNDEFINED)
+#define MAKE_CONST(value) Node(nullptr, {NodeType::NODE_CONST, value}, nullptr)
+// binary
+auto MAKE_OP(const Node& left, Operator op, const Node& right) {
+    return Node(new Node(left), {NodeType::NODE_OP, op}, new Node(right));
+}
+//unary
+auto MAKE_OP(Operator op, const Node& right) {
+    return Node(nullptr, {NodeType::NODE_OP, op}, new Node(right));
+}
+#define OP(node) (std::get<Operator>((node).data.value))
+#define VAR(node) (std::get<Variable>((node).data.value))
+#define VALUE(node) (std::get<double>((node).data.value))
+#define EPS 1e-5
+#define EQUAL(value1, value2) (fabs((value1) - (value2)) < EPS)
+
+
+
 Node operator+(const Node& left, const Node& right) {
     if (IS_CONST(left) && IS_CONST(right))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, VALUE(left) + VALUE(right)}, nullptr);
+        return MAKE_CONST(VALUE(left) + VALUE(right));
 
     if (IS_CONST(left) && EQUAL(VALUE(left), 0))
         return Node(right);
@@ -100,27 +127,27 @@ Node operator+(const Node& left, const Node& right) {
     if (IS_CONST(right) && EQUAL(VALUE(right), 0))
         return Node(left);
     
-    return Node(new Node(left), NodeData{NodeType::NODE_OP, Operator::OP_PLUS}, new Node(right));
+    return MAKE_OP(left, Operator::OP_PLUS, right);
 }
 
 
 Node operator-(const Node& left, const Node& right) {
     if (IS_CONST(left) && IS_CONST(right))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, VALUE(left) - VALUE(right)}, nullptr);
+        return MAKE_CONST(VALUE(left) - VALUE(right));
 
     if (IS_CONST(right) && EQUAL(VALUE(right), 0))
         return Node(left);
     
-    return Node(new Node(left), NodeData{NodeType::NODE_OP, Operator::OP_MINUS}, new Node(right));
+    return MAKE_OP(left, Operator::OP_MINUS, right);
 }
 
 
 Node operator*(const Node& left, const Node& right) {
     if (IS_CONST(left) && IS_CONST(right))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, VALUE(left) * VALUE(right)}, nullptr);
+        return MAKE_CONST(VALUE(left) * VALUE(right));
 
     if ((IS_CONST(left) && EQUAL(VALUE(left), 0)) || (IS_CONST(right) && EQUAL(VALUE(right), 0)))
-        return Node(nullptr, {NodeType::NODE_CONST, 0}, nullptr);
+        return MAKE_CONST(0);
 
     if (IS_CONST(left) && EQUAL(VALUE(left), 1))
         return Node(right);
@@ -128,40 +155,51 @@ Node operator*(const Node& left, const Node& right) {
     if (IS_CONST(right) && EQUAL(VALUE(right), 1))
         return Node(left);
     
-    return Node(new Node(left), NodeData{NodeType::NODE_OP, Operator::OP_MUL}, new Node(right));
+    return MAKE_OP(left, Operator::OP_MUL, right);
 }
 
 
 Node operator/(const Node& left, const Node& right) {
     if (IS_CONST(left) && IS_CONST(right))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, VALUE(left) / VALUE(right)}, nullptr);
+        return MAKE_CONST(VALUE(left) / VALUE(right));
 
     if (IS_CONST(left) && EQUAL(VALUE(left), 0))
-        return Node(nullptr, {NodeType::NODE_CONST, 0}, nullptr);
+        return MAKE_CONST(0);
 
     if (IS_CONST(right) && EQUAL(VALUE(right), 1))
         return Node(left);
+
+    if (IS_VAR(left) && IS_VAR(right) && VAR(left) == VAR(right))
+        return MAKE_CONST(1);
     
-    return Node(new Node(left), NodeData{NodeType::NODE_OP, Operator::OP_DIV}, new Node(right));
+    return MAKE_OP(left, Operator::OP_DIV, right);
 }
+
 
 Node operator^(const Node& left, const Node& right) {
     if (IS_CONST(left) && IS_CONST(right))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, pow(VALUE(left), VALUE(right))}, nullptr);
+        return MAKE_CONST(pow(VALUE(left), VALUE(right)));
 
     if (IS_CONST(left) && EQUAL(VALUE(left), 0))
-        return Node(nullptr, {NodeType::NODE_CONST, 0}, nullptr);
+        return MAKE_CONST(0);
 
     if ((IS_CONST(right) && EQUAL(VALUE(right), 0)) || (IS_CONST(left) && EQUAL(VALUE(left), 1)))
-        return Node(nullptr, {NodeType::NODE_CONST, 1}, nullptr);
+        return MAKE_CONST(1);
 
-    return Node(new Node(left), NodeData{NodeType::NODE_OP, Operator::OP_POW}, new Node(right));
+    return MAKE_OP(left, Operator::OP_POW, right);
+}
 
+
+Node ln(const Node& node) {
+    if (IS_CONST(node))
+        return MAKE_CONST(log(VALUE(node)));
+
+    return MAKE_OP(Operator::OP_LN, node);
 }
 
 
 
-Node derivative(const Node& node) {
+Node derivative(const Node& node) { 
 #define L *node.left
 #define R *node.right
 #define dL derivative(L)
@@ -170,9 +208,9 @@ Node derivative(const Node& node) {
 #define cR Node(R)
 
     if (IS_CONST(node))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, 0}, nullptr);
+        return MAKE_CONST(0);
     if (IS_VAR(node))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, 1}, nullptr);                                       // TODO
+        return MAKE_CONST(1);                                                                            // TODO
     switch (OP(node)) {
         case Operator::OP_PLUS:
             return dL + dR;
@@ -183,10 +221,10 @@ Node derivative(const Node& node) {
         case Operator::OP_DIV:
             return (dL * cR - cL * dR) / (cR * cR);
         case Operator::OP_POW:
-            if (IS_CONST(R))
-                return R * (L ^ Node(nullptr, {NodeType::NODE_CONST, VALUE(R) - 1}, nullptr));
-            else /* coming soon */
-                throw derivative_exception();
+            return IS_CONST(R) ? cR * (cL ^ MAKE_CONST(VALUE(R) - 1)) * dL
+                               : (cL ^ cR) * (dR * ln(cL) + (cR * dL) / cL);
+        case Operator::OP_LN:
+            return dR / cR;
         default:
             throw derivative_exception();
     }
@@ -222,6 +260,9 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
             case OP_POW:
                 value = "^";
                 break;
+            case OP_LN:
+                value = "ln";
+                break;
             default:
                 throw derivative_exception();
         }
@@ -246,7 +287,10 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
 
     std::string indent_str(indent, ' ');
 
-    ans += indent_str + std::to_string((size_t)root) + " [label=\"" + value + "\"];\n";
+    ans += indent_str + std::to_string((size_t)root) + " [label=\"" + value + "\""
+                                                         "color=\"" + (IS_OP(*root)  ? "red" :
+                                                                       IS_VAR(*root) ? "blue" :
+                                                                                       "green") + "\"];\n";
     ans += indent_str + std::to_string((size_t)root) + "-> {";
     
     unsigned argnum = (root->left != nullptr) + (root->right != nullptr);
@@ -262,6 +306,11 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
 }
 
 
+/* 
+    prints dump in dot format
+    run ./a.out > dump && dot -Tps dump -o graph.ps && xdg-open graph.ps
+    to see it
+*/
 void dump(Node* root) {
     std::string to_dot;
     to_dot += "digraph G {";
@@ -281,7 +330,7 @@ Node deserialize(const char* expression, char var = 'x') {
         if (*ch == ' ')
             continue;
         if (*ch == '(') {
-            if (!node->left) {
+            if (IS_UNDEFINED(*node)) {
                 node->left = new Node(node);
                 node = node->left;
             }
@@ -315,6 +364,10 @@ Node deserialize(const char* expression, char var = 'x') {
                 default:
                     throw derivative_exception();
             }
+        }
+        else if (strlen(ch) >= 2 && *ch == 'l' && *(ch + 1) == 'n') {                   
+            ++ch;
+            node->data = NodeData{NodeType::NODE_OP, Operator::OP_LN};
         }
         else {
             char* double_end = nullptr;
@@ -351,8 +404,9 @@ std::string eat_extra_zeros(const std::string& expression) {
 
 std::string serialize(const Node& root) {
     std::string ans = "( ";
-    if (root.left) {
-        ans += serialize(*root.left);
+    if (IS_OP(root)) {
+        if (root.left)
+            ans += serialize(*root.left);
         switch(OP(root)) {
             case Operator::OP_PLUS:
                 ans += " + ";
@@ -369,10 +423,14 @@ std::string serialize(const Node& root) {
             case Operator::OP_POW:
                 ans += " ^ ";
                 break;
+            case Operator::OP_LN:
+                ans += "ln";
+                break;
             default:
                 throw derivative_exception();
         }
-        ans += serialize(*root.right);
+        if (root.right)
+            ans += serialize(*root.right);
     }
     else if (IS_VAR(root)) {
         switch(VAR(root)) {
@@ -394,6 +452,12 @@ std::string serialize(const Node& root) {
     }
     return ans + " )";
 }
+
+
+
+
+
+namespace latex {
 
 
 std::string to_latex(const Node& root) {
@@ -418,9 +482,11 @@ std::string to_latex(const Node& root) {
     if (OP(root) == Operator::OP_DIV)
         return "\\frac{" + left + "}{" + right + "}";
 
+    if (OP(root) == Operator::OP_LN)
+        return "\\ln{(" + right + ")}";
 
     if (OP(root) == Operator::OP_POW) {
-        if (!IS_OP(*root.left))
+        if (root.left && !IS_OP(*root.left))
             return left + "^{" + right + "}";
         return "(" + left + ")^{" + right + "}";
     }
@@ -428,10 +494,11 @@ std::string to_latex(const Node& root) {
     std::string ans = "";
 
 
-    if (IS_OP(*root.left) && OP(root) != Operator::OP_PLUS && OP(root) != Operator::OP_MINUS &&
+    if (root.left && IS_OP(*root.left) && 
+        OP(root) != Operator::OP_PLUS && OP(root) != Operator::OP_MINUS &&
         OP(*root.left) != Operator::OP_DIV)
-        ans += "\\left(" + left + "\\right)";
-    else if (IS_CONST(*root.left) && EQUAL(VALUE(*root.left), 0));
+            ans += "\\left(" + left + "\\right)";
+    else if (root.left && IS_CONST(*root.left) && EQUAL(VALUE(*root.left), 0));
         // replace "0-" with "-"
     else
         ans += left;
@@ -450,7 +517,7 @@ std::string to_latex(const Node& root) {
             throw derivative_exception();
     }
 
-    if (IS_OP(*root.right) && OP(root) != Operator::OP_PLUS)
+    if (root.right && IS_OP(*root.right) && OP(root) != Operator::OP_PLUS)
         ans += "\\left(" + right + "\\right)";
     else
         ans += right;
@@ -469,16 +536,20 @@ std::string make_latex_document(const std::string& latex_code) {
                       "\\usepackage[T1, T2A]{fontenc}\n"
                       "\\usepackage[utf8]{inputenc}\n"
                       "\\usepackage[russian]{babel}\n"
-                      "\\begin{document}\n";
+                      "\\usepackage{mathtools}\n"
+                      "\\title{Derivative poem}\n"
+                      "\\begin{document}\n"
+                      "\\maketitle\n";
     ans += latex_code + "\n";
-    return ans + "\\end{document}";
+    return ans + "\\begin{thebibliography}{9}\n"
+                 "\\bibitem{onegin} A.\\,S.\\,Pushkin, \\emph{Eugeniy Onegin} 217--304\n"
+                 "\\bibitem{clique} B.\\,Bollob\\'{a}s, P.\\,Erd\\\"{o}s," 
+                                   "\\emph{Cliques in random graphs}, "
+                                   "Mathematical Proceedings of the Cambridge Philosophical Society. "
+                                   "{\\bf 80} (1976)~419--427"
+                 "\\end{thebibliography}"
+                 "\\end{document}";
 }
-
-
-
-
-// POEM
-
 
 
 namespace poem {
@@ -494,8 +565,19 @@ const std::vector<std::string> linking_words = {
     "We have",
     "1488 ЛОГАРИФМЫ  БРАТ НЕ   БРОСИМ!!!!",
     "Until suddenly everything ends",
-    "Do you really have nothing to do?"
+    "Do you really have nothing to do?",
+    "lolkekcheburek",
+    "see \\cite{clique}",
+    "see \\cite{onegin}",
+    "deri-deri-derivative"
 };
+
+
+void append_poem(std::string& poem, const Node& node, const Node& ans) {
+    poem += linking_words[rand() % linking_words.size()] + 
+            "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
+            to_latex(ans) + "$\n\n";
+}
 
 
 Node derivative_poem_step(const Node& node, std::string& poem) {
@@ -508,53 +590,36 @@ Node derivative_poem_step(const Node& node, std::string& poem) {
 #define cR Node(R)
 
     if (IS_CONST(node))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, 0}, nullptr);
+        return MAKE_CONST(0);
     if (IS_VAR(node))
-        return Node(nullptr, NodeData{NodeType::NODE_CONST, 1}, nullptr);                                      // TODO
+        return MAKE_CONST(1);                                  // TODO
     
+    Node ans;
     switch (OP(node)) {
-        case Operator::OP_PLUS: {
-            auto ans = dL + dR;
-            poem += linking_words[rand() % linking_words.size()] + 
-                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
-                    to_latex(ans) + "$\n\n";
-            return ans;
-        }
-        case Operator::OP_MINUS: {
-            auto ans = dL - dR;
-            poem += linking_words[rand() % linking_words.size()] + 
-                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
-                    to_latex(ans) + "$\n\n";
-            return ans;
-        }
-        case Operator::OP_MUL: {
-            auto ans = dL * cR + cL * dR;
-            poem += linking_words[rand() % linking_words.size()] + 
-                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
-                    to_latex(ans) + "$\n\n";
-            return ans;
-        }
-        case Operator::OP_DIV: {
-            auto ans = (dL * cR - cL * dR) / (cR * cR);
-            poem += linking_words[rand() % linking_words.size()] + 
-                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
-                    to_latex(ans) + "$\n\n";
-            return ans;
-        }
-
-        case Operator::OP_POW: {
-            if (!IS_CONST(R)) /* coming soon */
-                throw derivative_exception();
-            
-            auto ans = R * (L ^ Node(nullptr, {NodeType::NODE_CONST, VALUE(R) - 1}, nullptr));
-            poem += linking_words[rand() % linking_words.size()] + 
-                    "\n\n$\\frac{d}{dx}\\left(" + to_latex(node) + "\\right) = " + 
-                    to_latex(ans) + "$\n\n";
-            return ans;
-        }
+        case Operator::OP_PLUS:
+            ans = dL + dR;
+            break;
+        case Operator::OP_MINUS:
+            ans = dL - dR;
+            break;
+        case Operator::OP_MUL:
+            ans = dL * cR + cL * dR;
+            break;
+        case Operator::OP_DIV:
+            ans = (dL * cR - cL * dR) / (cR * cR);
+            break;
+        case Operator::OP_POW:
+            ans = IS_CONST(R) ? cR * (cL ^ MAKE_CONST(VALUE(R) - 1)) * dL
+                                   : (cL ^ cR) * (dR * ln(cL) + (cR * dL) / cL);
+            break;
+        case Operator::OP_LN:
+            ans = dR / cR;
+            break;
         default:
             throw derivative_exception();
     }
+    append_poem(poem, node, ans);
+    return ans;
 
 #undef cR
 #undef cL
@@ -574,3 +639,5 @@ std::string how_do_I_calculate_the_derivative_poem(const std::string& all_parant
 }
 
 } // namespace poem
+
+} // namespace latex
