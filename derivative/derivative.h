@@ -91,21 +91,8 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
     }
     else if (IS_CONST(*root))
         value = std::to_string(VALUE(*root));
-    else {
-        switch (VAR(*root)) {
-            case VAR_X:
-                value = "x";
-                break;
-            case VAR_Y:
-                value = "y";
-                break;
-            case VAR_Z:
-                value = "z";
-                break;
-            default:
-                throw derivative_exception();
-        }
-    }
+    else
+        value = NAME(*root);
 
     std::string indent_str(indent, ' ');
 
@@ -165,7 +152,7 @@ Node deserialize(const char* expression, char var = 'x') {
             node = node->parent;
         }
         else if (*ch == var /* is var */)                                                                           // TODO
-            node->data = NodeData{NodeType::NODE_VAR, Variable::VAR_X};
+            node->data = {NodeType::NODE_VAR, "x"};
         else if (*ch == '+' || *ch == '-' || *ch == '*' || *ch == '/' || *ch == '^') {
             switch (*ch) {
                 case '+':
@@ -240,19 +227,7 @@ std::string serialize(const Node& root) {
             ans += serialize(*root.right);
     }
     else if (IS_VAR(root)) {
-        switch(VAR(root)) {
-            case Variable::VAR_X:
-                ans += 'x';
-                break;
-            case Variable::VAR_Y:
-                ans += 'y';
-                break;
-            case Variable::VAR_Z:
-                ans += 'z';
-                break;
-            default:
-                throw derivative_exception();
-        }
+        ans += NAME(root);
     }
     else /* IS_CONST(root) */ { 
         ans += eat_extra_zeros(std::to_string(VALUE(root)));

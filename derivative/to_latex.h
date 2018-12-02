@@ -11,16 +11,7 @@ std::string to_latex(const Node& root) {
     if (IS_CONST(root))
         return eat_extra_zeros(std::to_string(VALUE(root)));
     if (IS_VAR(root))
-        switch (VAR(root)) {
-            case Variable::VAR_X:
-                return "x";
-            case Variable::VAR_Y:
-                return "y";
-            case Variable::VAR_Z:
-                return "z";
-            default:
-                throw derivative_exception(); 
-        }
+        return "x";                                                                                     // TODO
 
     std::string left  = root.left ? to_latex(*root.left) : "",
                 right = root.right ? to_latex(*root.right) : "";

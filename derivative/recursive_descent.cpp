@@ -2,16 +2,20 @@
 #include <stdio.h>
 #include "derivative.h"
 #include "to_latex.h"
+#include <string>
+
 
 /*
-    Grammar:     G >> E\0
-    Expression:  E >> S{[+-]S}*
-    Summand:     S >> M{[/*]M}*
-    Multiplier:  M >> P|P^P
-    Paranthesis: P >> (E)|N
-    Number:      N >> [0-9]+
+    Grammar:      G >> (OP|E)+\0
+    Expression:   E >> S{[+-]S}*
+    Summand:      S >> M{[/*]M}*
+    Multiplier:   M >> P|P^P
+    Paranthesis:  P >> (E)|N
+    Number:       N >> [0-9]+
+    Identificator:ID >> [a-z,A-Z]+
+    Operation:    OP >> ID[=]E
+    If:           IF >> if(E)OP
 */
-
 
 
 int p = 0;
@@ -19,6 +23,33 @@ const char* s = nullptr;
 
 Node getE();
 
+auto getID() {
+    std::string name;
+
+    int p0 = p;
+    while (('a' <= s[p] && s[p] <= 'z') ||
+           ('A' <= s[p] && s[p] >= 'Z')) {
+        name += s[p];
+        ++p;
+    }
+
+    assert(p0 != p);
+    return MAKE_VAR(name.c_str());
+}
+
+auto getOP() {
+    int p0 = p;
+    auto id = getID();
+
+    assert(p != p0);
+    assert(s[p] == '=');
+    ++p, ++p0;
+
+    auto expr = getE();
+    assert(p != p0);
+
+    return MAKE_OP(id, Operator::OP_ASSIGN, expr);
+}
 
 auto getN() {
     int val = 0;
@@ -30,7 +61,6 @@ auto getN() {
     }
 
     assert(p0 != p);
-
     return MAKE_CONST(val);
 }
 
@@ -103,7 +133,9 @@ auto getG(const char* str) {
     p = 0;
 
     Node node = getE();
-    
+    if (!p)
+        node = getE
+
     assert(s[p] == '\0');
     ++p;
 
@@ -112,7 +144,7 @@ auto getG(const char* str) {
 
 
 int main() {
-    auto node = getG("2+2^(0-2+11)");
-    printf("%s\n", make_latex_document(to_latex(derivative(node))).c_str());
-    // dump(&node);
+    auto node = getG("x=2+2^(0-2+11)");
+    dump(&node);
+    // printf("%s\n", make_latex_document(to_latex(derivative(node))).c_str());
 }

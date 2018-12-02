@@ -1,21 +1,20 @@
 #pragma once
 
-
-
-enum Variable {
-    VAR_X,
-    VAR_Y,
-    VAR_Z
-};
+#include <variant>
+#include <math.h>
 
 
 enum Operator {
+// arithmetic
     OP_PLUS,
     OP_MINUS,
     OP_MUL,
     OP_DIV,
     OP_POW,
-    OP_LN
+    OP_LN,
+
+// assignment
+    OP_ASSIGN
 };
 
 
@@ -29,7 +28,7 @@ enum NodeType {
 
 struct NodeData {
     NodeType type;
-    std::variant<Variable, Operator, double> value = 0;
+    std::variant<const char*, Operator, double> value = 0;
 };
 
 
@@ -88,6 +87,7 @@ struct Node {
 #define IS_CONST(node) ((node).data.type == NodeType::NODE_CONST)
 #define IS_UNDEFINED(node) ((node).data.type == NodeType::NODE_UNDEFINED)
 #define MAKE_CONST(value) Node(nullptr, {NodeType::NODE_CONST, value}, nullptr)
+#define MAKE_VAR(name) Node(nullptr, {NodeType::NODE_VAR, name}, nullptr)
 // binary
 auto MAKE_OP(const Node& left, Operator op, const Node& right) {
     return Node(new Node(left), {NodeType::NODE_OP, op}, new Node(right));
@@ -97,8 +97,8 @@ auto MAKE_OP(Operator op, const Node& right) {
     return Node(nullptr, {NodeType::NODE_OP, op}, new Node(right));
 }
 #define OP(node) (std::get<Operator>((node).data.value))
-#define VAR(node) (std::get<Variable>((node).data.value))
 #define VALUE(node) (std::get<double>((node).data.value))
+#define NAME(node) (std::get<const char*>((node).data.value))
 #define EPS 1e-5
 #define EQUAL(value1, value2) (fabs((value1) - (value2)) < EPS)
 
@@ -156,7 +156,7 @@ Node operator/(const Node& left, const Node& right) {
     if (IS_CONST(right) && EQUAL(VALUE(right), 1))
         return Node(left);
 
-    if (IS_VAR(left) && IS_VAR(right) && VAR(left) == VAR(right))
+    if (IS_VAR(left) && IS_VAR(right) && !strcmp(NAME(left), NAME(right)))
         return MAKE_CONST(1);
     
     return MAKE_OP(left, Operator::OP_DIV, right);
