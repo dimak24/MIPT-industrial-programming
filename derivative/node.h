@@ -32,37 +32,6 @@ constexpr auto _get_operators_types() {
     return ans;
 }
 
-// constexpr auto _get_operators_mnemonics() {
-//     std::array<const char*, __OP_LAST__> ans = {};
-
-// #define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = mnemonic;
-// #include "operators.h"
-// #undef DEF_OP
-    
-//     return ans;
-// }
-
-// constexpr auto _get_operators_arg_num() {
-//     std::array<unsigned, __OP_LAST__> ans = {};
-
-// #define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = arg_num;
-// #include "operators.h"
-// #undef DEF_OP
-    
-//     return ans;
-// }
-
-// constexpr auto _get_operators_func() {
-//     std::array<std::, __OP_LAST__> ans = {};
-
-// #define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = arg_num;
-// #include "operators.h"
-// #undef DEF_OP
-    
-//     return ans;
-// }
-
-
 constexpr auto _OPERATORS_TYPES = _get_operators_types();
 
 #define IS_BINARY(op) (_OPERATORS_TYPES[op] == OT_BINARY)

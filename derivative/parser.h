@@ -3,6 +3,7 @@
 #include <exception>
 #include <string>
 
+#include "derivative.h"
 #include "lexer.h"
 #include "node.h"
 
@@ -21,16 +22,28 @@ public:
 };
 
 /*
-    Grammar:      G >> OP+\0
-    Expression:   E >> S{[+-]S}*
-    Summand:      S >> M{[/*]M}*
-    Multiplier:   M >> P|P^P
-    Paranthesis:  P >> (E)|N
-    Number:       N >> [0-9]+
-    Identificator:ID >> [a-z,A-Z]+
-    Operation:    OP >> ID[=]VAL
-    Value:        VAL >> N|ID
-    If:           IF >> if(E)OP
+    Number:                    N >> [0-9]+
+    Identificator:             ID >> [a-z,A-Z]+
+
+    Array:                     A >> \[{E|{E,}*E}\]
+
+    Expression:                E >> S{[+-]S}*
+    Summand:                   S >> M{[/*]M}*
+    Multiplier:                M >> P|P^P
+    Paranthesis:               P >> (E)|VAL
+
+    Value:                     VAL >> N|ID
+
+    Math function declaration: F >> ID(ID)[=]E'
+    
+    Call:                      C >> {ID|[*+]}({E,}*E)
+
+    Operation:                 OP >> ID[=]VAL
+    If:                        IF >> if(E) then G end;
+    While:                     W >> till the cows come home repeat G end;
+
+    Instruction:               I >> OP|IF|W|C
+    Grammar:                   G >> {I;}+\0
 */
 
 class Parser {
@@ -44,7 +57,7 @@ private:
             throw parser_exception("empty program");
 
         lexer_.reset(p0);
-        auto node = getOP_();                                                                           // TODO
+        auto node = getI_();
 
         while (true) {
             p0 = lexer_.mark();
@@ -54,9 +67,82 @@ private:
             if (lexeme.type == LT_EOF)
                 break;    
             
-            node = getOP_();
+            node = getI_();                                                                             // TODO
         }
         return node;
+    }
+
+    Node getC_() {}
+
+    Node getI_() {
+        auto p0 = lexer_.mark();
+        try {
+            return getIF_();
+        } catch (parser_exception&) {
+            try {
+                lexer_.reset(p0);
+                return getW_();
+            } catch (parser_exception&) {
+                lexer_.reset(p0);
+                try {
+                    return getC_();
+                } catch (parser_exception&) {
+                    lexer_.reset(p0);
+                    return getOP_();
+                }
+            }
+        }
+    }
+
+    Node getIF_() {
+        if (lexer_.next_lexeme().type != LT_IF)
+            throw parser_exception("if expected");
+
+        auto cond = getE_();
+
+        if (lexer_.next_lexeme().type != LT_THEN)
+            throw parser_exception("then expected");
+
+        auto instr = getG_();
+
+        if (lexer_.next_lexeme().type != LT_END)
+            throw parser_exception("end eapected");
+
+        return MAKE_OP<OP_IF>(cond, instr);
+    }
+
+    Node getW_() {
+        if (lexer_.next_lexeme().type != LT_WHILE)
+            throw parser_exception("while expected");
+
+        if (lexer_.next_lexeme().type != LT_REPEAT)
+            throw parser_exception("repeat expected");
+
+        auto instr = getG_();
+
+        if (lexer_.next_lexeme().type != LT_END)
+            throw parser_exception("end eapected");
+
+        return MAKE_OP<OP_WHILE>(instr);
+    }
+
+    Node getF_() {
+        auto name = getID_();
+
+        if (lexer_.next_lexeme().type != LT_L_PARANTHESIS)
+            throw parser_exception("( expected");
+
+        auto var = getID_();
+
+        if (lexer_.next_lexeme().type != LT_R_PARANTHESIS)
+            throw parser_exception(") expected");
+
+        auto expr = getE_();
+
+        if (lexer_.next_lexeme().type != LT_DERIVATIVE)
+            throw parser_exception("\' expected");
+
+        return derivative(expr, NAME(var));                                                             // TODO: make it a function
     }
 
     Node getE_() {
@@ -182,9 +268,9 @@ private:
 
         switch (lexeme.type) {
             case LT_ASSIGN:
-                return MAKE_OP(node, OP_ASSIGN, node2);
+                return MAKE_OP<OP_ASSIGN>(node, node2);
             default:
-                return MAKE_OP(node, OP_ASSIGN, node2);                                                 // TODO
+                return MAKE_OP<OP_ASSIGN>(node, node2);                                                 // TODO
         }
     }
 

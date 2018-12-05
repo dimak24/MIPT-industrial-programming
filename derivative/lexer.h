@@ -13,6 +13,7 @@ enum LexemeType {
 
     LT_KEYWORD,
     LT_THEN,
+    LT_REPEAT,
     LT_END,
 
     LT_DERIVATIVE,
@@ -22,6 +23,8 @@ enum LexemeType {
 
     LT_R_PARANTHESIS,
     LT_L_PARANTHESIS,
+    LT_L_BRACKET,
+    LT_R_BRACKET,
 
     LT_PLUS,
     LT_MINUS,
@@ -169,6 +172,10 @@ public:
             case ')':
                 ++p_;
                 return {LT_R_PARANTHESIS};
+            case '[':
+                return {LT_L_BRACKET};
+            case ']':
+                return {LT_R_BRACKET};
             case '\'':
                 ++p_;
                 return {LT_DERIVATIVE};
@@ -202,6 +209,18 @@ public:
                 if (end_ - p_ >= 2 && !memcmp(p_, "if", 2)) {
                     p_ += 2;
                     return {LT_IF};
+                }
+                if (end_ - p_ >= 4 && !memcmp(p_, "then", 4)) {
+                    p_ += 4;
+                    return {LT_THEN};
+                }
+                if (end_ - p_ >= 6 && !memcmp(p_, "repeat", 6)) {
+                    p_ += 6;
+                    return {LT_REPEAT};
+                }
+                if (end_ - p_ >= 3 && !memcmp(p_, "end", 3)) {
+                    p_ += 3;
+                    return {LT_END};
                 }
 
                 std::string name;
