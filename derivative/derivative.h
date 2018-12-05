@@ -1,13 +1,12 @@
 #pragma once
 
-#include <variant>
+#include <algorithm>
+#include <cstdlib>
 #include <exception>
 #include <math.h>
-#include <cstdlib>
-#include <algorithm>
-#include <string.h>
 #include <stdlib.h>
-#include <time.h>
+#include <string.h>
+#include <variant>
 #include <vector>
 
 #include "node.h"
@@ -16,47 +15,60 @@
 
 
 struct derivative_exception : public std::exception {
+private:
+    const char* msg_;
 
+public:
+    derivative_exception(const char* msg)
+        : msg_(msg) {}
+
+    virtual const char* what() noexcept {
+        return msg_;
+    }
 };
 
 
 
-Node derivative(const Node& node) { 
-#define L *node.left
-#define R *node.right
-#define dL derivative(L)
-#define dR derivative(R)
+Node derivative(const Node& node, const char* var = "x") {
+#define ARG(n) *node.children[n]
+#define L ARG(0)
+#define R ARG(1)
+#define dARG(n) *node,children[n]
+#define dL derivative(L, var)
+#define dR derivative(R, var)
 #define cL Node(L)
 #define cR Node(R)
 
     if (IS_CONST(node))
         return MAKE_CONST(0);
     if (IS_VAR(node))
-        return MAKE_CONST(1);                                                                            // TODO
+        return MAKE_CONST(!strcmp(var, NAME(node)));
     switch (OP(node)) {
-        case Operator::OP_PLUS:
+        case OP_PLUS:
             return dL + dR;
-        case Operator::OP_MINUS:
+        case OP_MINUS:
             return dL - dR;
-        case Operator::OP_MUL:
+        case OP_MUL:
             return dL * cR + cL * dR;
-        case Operator::OP_DIV:
+        case OP_DIV:
             return (dL * cR - cL * dR) / (cR * cR);
-        case Operator::OP_POW:
+        case OP_POW:
             return IS_CONST(R) ? cR * (cL ^ MAKE_CONST(VALUE(R) - 1)) * dL
                                : (cL ^ cR) * (dR * ln(cL) + (cR * dL) / cL);
-        case Operator::OP_LN:
-            return dR / cR;
+        case OP_LN:
+            return dL / cL;
         default:
-            throw derivative_exception();
+            throw derivative_exception("unknown operator");
     }
 
 #undef cR
 #undef cL
 #undef dR
 #undef dL
+#undef dARG
 #undef R
 #undef L
+#undef ARG
 }
 
 
@@ -65,30 +77,17 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
         return;
 
     std::string value = "";
-    if (IS_OP(*root)) {
+    if (IS_OP(*root))
         switch (OP(*root)) {
-            case OP_PLUS:
-                value = "+";
+#define DEF_OP(name, type, mnemonic, arg_num, f) \
+            case OP_##name: \
+                value = mnemonic; \
                 break;
-            case OP_MINUS:
-                value = "-";
-                break;
-            case OP_MUL:
-                value = "*";
-                break;
-            case OP_DIV:
-                value = "/";
-                break;
-            case OP_POW:
-                value = "^";
-                break;
-            case OP_LN:
-                value = "ln";
-                break;
+#include "operators.h"
+#undef DEF_OP
             default:
-                throw derivative_exception();
+                throw derivative_exception("unknown operator");
         }
-    }
     else if (IS_CONST(*root))
         value = std::to_string(VALUE(*root));
     else
@@ -102,16 +101,17 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
                                                                                        "green") + "\"];\n";
     ans += indent_str + std::to_string((size_t)root) + "-> {";
     
-    unsigned argnum = (root->left != nullptr) + (root->right != nullptr);
-    if (argnum == 2)
-        ans += std::to_string((size_t)root->left) + ", " + std::to_string((size_t)root->right);
-    else if (argnum)
-        ans += std::to_string((size_t)(root->left ? root->left : root->right));
+    auto argnum = root->children.size();
+    if (argnum) {
+        ans += std::to_string((size_t)root->children[0]);
+        for (auto i = 1; i < argnum; ++i)
+            ans += ", " + std::to_string((size_t)root->children[i]);
+    }
     
     ans +=  "};\n";
 
-    append_dump(root->left, ans, indent);
-    append_dump(root->right, ans, indent);
+    for (auto child : root->children)
+        append_dump(child, ans, indent);
 }
 
 
@@ -130,7 +130,7 @@ void dump(Node* root) {
 
 
 Node deserialize(const char* expression, char var = 'x') {
-    Node* root = new Node(nullptr);
+    Node* root = new Node();
     Node* node = root;
 
     const char* end = expression + strlen(expression);
@@ -138,57 +138,34 @@ Node deserialize(const char* expression, char var = 'x') {
     for (const char* ch = expression; ch != end; ++ch) {
         if (*ch == ' ')
             continue;
-        if (*ch == '(') {
-            if (IS_UNDEFINED(*node)) {
-                node->left = new Node(node);
-                node = node->left;
-            }
-            else {
-                node->right = new Node(node);
-                node = node->right;
-            }
-        }
-        else if (*ch == ')') {
+        if (*ch == '(')
+            node = node->init_new_child();
+        else if (*ch == ')')
             node = node->parent;
-        }
         else if (*ch == var /* is var */)                                                                           // TODO
             node->data = {NodeType::NODE_VAR, "x"};
-        else if (*ch == '+' || *ch == '-' || *ch == '*' || *ch == '/' || *ch == '^') {
-            switch (*ch) {
-                case '+':
-                    node->data = NodeData{NodeType::NODE_OP, Operator::OP_PLUS};
-                    break;
-                case '-':
-                    node->data = NodeData{NodeType::NODE_OP, Operator::OP_MINUS};
-                    break;
-                case '*':
-                    node->data = NodeData{NodeType::NODE_OP, Operator::OP_MUL};
-                    break;
-                case '/':
-                    node->data = NodeData{NodeType::NODE_OP, Operator::OP_DIV};
-                    break;
-                case '^':
-                    node->data = NodeData{NodeType::NODE_OP, Operator::OP_POW};
-                    break;
-                default:
-                    throw derivative_exception();
-            }
-        }
-        else if (strlen(ch) >= 2 && *ch == 'l' && *(ch + 1) == 'n') {                   
-            ++ch;
-            node->data = NodeData{NodeType::NODE_OP, Operator::OP_LN};
-        }
-        else {
+        else if (*ch == '.' || ('0' <= *ch && *ch <= '9')) {
             char* double_end = nullptr;
             double value = strtod(ch, &double_end);
 
-            node->data = NodeData{NodeType::NODE_CONST, value};
+            node->data = {NodeType::NODE_CONST, value};
 
             ch = --double_end;
         }
+        else {
+#define DEF_OP(name, type, mnemonic, arg_num, f) \
+            if (strlen(ch) >= strlen(mnemonic) && !strncmp(ch, mnemonic, strlen(mnemonic))) { \
+                node->data = {NODE_OP, OP_##name}; \
+                ch += strlen(mnemonic) - 1; \
+                continue; \
+            }
+#include "operators.h"
+#undef DEF_OP
+            throw derivative_exception("could not parse expr");
+        }
     }
 
-    return *root->left;
+    return *root->children[0];
 }
 
 Node deserialize(std::string expression, char var = 'x') {
@@ -199,38 +176,36 @@ Node deserialize(std::string expression, char var = 'x') {
 std::string serialize(const Node& root) {
     std::string ans = "( ";
     if (IS_OP(root)) {
-        if (root.left)
-            ans += serialize(*root.left);
-        switch(OP(root)) {
-            case Operator::OP_PLUS:
-                ans += " + ";
-                break;
-            case Operator::OP_MINUS:
-                ans += " - ";
-                break;
-            case Operator::OP_MUL:
-                ans += " * ";
-                break;
-            case Operator::OP_DIV:
-                ans += " / ";
-                break;
-            case Operator::OP_POW:
-                ans += " ^ ";
-                break;
-            case Operator::OP_LN:
-                ans += "ln";
-                break;
+        switch (OP(root)) {
+#define DEF_OP(name, type, mnemonic, arg_num, f) \
+            case OP_##name: \
+                if (IS_UNARY(OP_##name)) { \
+                    ans += std::string(mnemonic) + serialize(*root.children[0]); \
+                    break; \
+                } \
+                if (IS_BINARY(OP_##name)) { \
+                    ans += serialize(*root.children[0]) + " " \
+                                                          mnemonic \
+                                                               " " + serialize(*root.children[1]); \
+                    break; \
+                } \
+                ans += std::string(mnemonic) + "("; \
+                if (arg_num) \
+                    ans += serialize(*root.children[0]); \
+                for (auto i = 0; i < arg_num; ++i) \
+                    ans += ", " + serialize(*root.children[i]); \
+                ans += ")"; \
+                return ans;
+#include "operators.h"
+#undef DEF_OP
             default:
-                throw derivative_exception();
+                throw derivative_exception("unknown operator");
         }
-        if (root.right)
-            ans += serialize(*root.right);
     }
-    else if (IS_VAR(root)) {
+    else if (IS_VAR(root))
         ans += NAME(root);
-    }
-    else /* IS_CONST(root) */ { 
+    else /* IS_CONST(root) */ 
         ans += eat_extra_zeros(std::to_string(VALUE(root)));
-    }
+
     return ans + " )";
 }

@@ -1,0 +1,7 @@
+DEF_OP(PLUS, BINARY, "+", 2, std::plus<Node>())
+DEF_OP(MINUS, BINARY, "-", 2, std::minus<Node>())
+DEF_OP(MUL, BINARY, "*", 2, std::multiplies<Node>())
+DEF_OP(DIV, BINARY, "/", 2, std::divides<Node>())
+DEF_OP(POW, BINARY, "^", 2, [](const Node& a, const Node& b) {return a ^ b;})
+DEF_OP(LN, OTHER, "ln", 1, log)
+DEF_OP(ASSIGN, OTHER, "=", 2, [](const Node& a, const Node& b) {return a = b;})

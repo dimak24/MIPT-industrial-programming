@@ -83,6 +83,15 @@ public:
     ~Lexer() {}
     Lexer() {}
 
+
+    const char* mark() const {
+        return p_;
+    }
+
+    void reset(const char* p) {
+        p_ = p;
+    }
+
     Lexeme next_lexeme() {
         while (p_ != end_ && *p_ == ' ')
             ++p_;

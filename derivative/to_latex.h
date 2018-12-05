@@ -1,9 +1,27 @@
 #pragma once
 
+#include <exception>
 #include <string>
+#include <ctime>
 
-#include "node.h"
 #include "auxiliary.h"
+#include "derivative.h"
+#include "node.h"
+
+
+
+struct latex_exception : public std::exception {
+private:
+    const char* msg_;
+
+public:
+    latex_exception(const char* msg)
+        : msg_(msg) {}
+
+    virtual const char* what() noexcept {
+        return msg_;
+    }
+};
 
 
 
@@ -11,56 +29,45 @@ std::string to_latex(const Node& root) {
     if (IS_CONST(root))
         return eat_extra_zeros(std::to_string(VALUE(root)));
     if (IS_VAR(root))
-        return "x";                                                                                     // TODO
+        return NAME(root);
 
-    std::string left  = root.left ? to_latex(*root.left) : "",
-                right = root.right ? to_latex(*root.right) : "";
+    if (OP(root) == OP_DIV)
+        return "\\frac{" + to_latex(*root.children[0]) + 
+                    "}{" + to_latex(*root.children[1]) + "}";
 
+    if (OP(root) == OP_LN)
+        return "\\ln{(" + to_latex(*root.children[0]) + ")}";
 
-    if (OP(root) == Operator::OP_DIV)
-        return "\\frac{" + left + "}{" + right + "}";
-
-    if (OP(root) == Operator::OP_LN)
-        return "\\ln{(" + right + ")}";
-
-    if (OP(root) == Operator::OP_POW) {
-        if (root.left && !IS_OP(*root.left))
-            return left + "^{" + right + "}";
-        return "(" + left + ")^{" + right + "}";
+    if (OP(root) == OP_POW) {
+        if (!IS_OP(*root.children[0]))
+            return to_latex(*root.children[0]) + "^{" + 
+                   to_latex(*root.children[1]) + "}";
+        
+        return "(" + to_latex(*root.children[0]) + ")^{" + 
+                     to_latex(*root.children[1]) + "}";
     }
 
-    std::string ans = "";
-
-
-    if (root.left && IS_OP(*root.left) && 
-        OP(root) != Operator::OP_PLUS && OP(root) != Operator::OP_MINUS &&
-        OP(*root.left) != Operator::OP_DIV)
-            ans += "\\left(" + left + "\\right)";
-    else if (root.left && IS_CONST(*root.left) && EQUAL(VALUE(*root.left), 0));
-        // replace "0-" with "-"
-    else
-        ans += left;
-
-    switch (OP(root)) {
-        case Operator::OP_PLUS:
-            ans += "+";
-            break;
-        case Operator::OP_MINUS:
-            ans += "-";
-            break;
-        case Operator::OP_MUL:
-            ans += "*";
-            break;
+    switch(OP(root)) {
+#define DEF_OP(name, type, mnemonic, arg_num, f) \
+        case OP_##name: { \
+            if (IS_UNARY(OP_##name)) \
+                return std::string(mnemonic) + to_latex(*root.children[0]); \
+            if (IS_BINARY(OP_##name)) { \
+                auto ans = to_latex(*root.children[0]) + mnemonic + to_latex(*root.children[1]); \
+                if (OP_##name == OP_PLUS || OP_##name == OP_MINUS) \
+                    ans = "\\left(" + ans + "\\right)"; \
+                return ans; \
+            } \
+            std::string ans = mnemonic "\\left("; \
+            for (auto child : root.children) \
+                ans += to_latex(*child); \
+            return ans +"\\right)"; \
+        }
+#include "operators.h"
+#undef DEF_OP
         default:
-            throw derivative_exception();
+            throw latex_exception("cannot convert to latex");
     }
-
-    if (root.right && IS_OP(*root.right) && OP(root) != Operator::OP_PLUS)
-        ans += "\\left(" + right + "\\right)";
-    else
-        ans += right;
-
-    return ans;
 }   
 
 
@@ -118,19 +125,20 @@ void append_poem(std::string& poem, const Node& node, const Node& ans) {
 }
 
 
-Node derivative_poem_step(const Node& node, std::string& poem) {
-
-#define L *node.left
-#define R *node.right
-#define dL derivative_poem_step(L, poem)
-#define dR derivative_poem_step(R, poem)
+Node derivative_poem_step(const Node& node, std::string& poem, const char* var = "x") {
+#define ARG(n) *node.children[n]
+#define L ARG(0)
+#define R ARG(1)
+#define dARG(n) *node,children[n]
+#define dL derivative_poem_step(L, poem, var)
+#define dR derivative_poem_step(R, poem, var)
 #define cL Node(L)
 #define cR Node(R)
 
     if (IS_CONST(node))
         return MAKE_CONST(0);
     if (IS_VAR(node))
-        return MAKE_CONST(1);                                  // TODO
+        return MAKE_CONST(!strcmp(var, NAME(node)));
     
     Node ans;
     switch (OP(node)) {
@@ -151,10 +159,10 @@ Node derivative_poem_step(const Node& node, std::string& poem) {
                                    : (cL ^ cR) * (dR * ln(cL) + (cR * dL) / cL);
             break;
         case Operator::OP_LN:
-            ans = dR / cR;
+            ans = dL / cL;
             break;
         default:
-            throw derivative_exception();
+            throw derivative_exception("unknown command");
     }
     append_poem(poem, node, ans);
     return ans;
@@ -163,8 +171,10 @@ Node derivative_poem_step(const Node& node, std::string& poem) {
 #undef cL
 #undef dR
 #undef dL
+#undef dARG
 #undef R
 #undef L
+#undef ARG
 }
 
 

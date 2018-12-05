@@ -1,21 +1,72 @@
 #pragma once
 
+#include <array>
+#include <cmath>
+#include <functional>
+#include <string.h>
 #include <variant>
-#include <math.h>
+#include <vector>
 
 
 enum Operator {
-// arithmetic
-    OP_PLUS,
-    OP_MINUS,
-    OP_MUL,
-    OP_DIV,
-    OP_POW,
-    OP_LN,
+#define DEF_OP(name, type, mnemonic, arg_num, f) OP_##name,
+#include "operators.h"
+#undef DEF_OP
 
-// assignment
-    OP_ASSIGN
+    __OP_LAST__,
 };
+
+enum OperatorType {
+    OT_OTHER,
+    OT_UNARY,
+    OT_BINARY
+};
+
+constexpr auto _get_operators_types() {
+    std::array<OperatorType, __OP_LAST__> ans = {};
+
+#define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = OT_##type;
+#include "operators.h"
+#undef DEF_OP
+
+    return ans;
+}
+
+// constexpr auto _get_operators_mnemonics() {
+//     std::array<const char*, __OP_LAST__> ans = {};
+
+// #define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = mnemonic;
+// #include "operators.h"
+// #undef DEF_OP
+    
+//     return ans;
+// }
+
+// constexpr auto _get_operators_arg_num() {
+//     std::array<unsigned, __OP_LAST__> ans = {};
+
+// #define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = arg_num;
+// #include "operators.h"
+// #undef DEF_OP
+    
+//     return ans;
+// }
+
+// constexpr auto _get_operators_func() {
+//     std::array<std::, __OP_LAST__> ans = {};
+
+// #define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = arg_num;
+// #include "operators.h"
+// #undef DEF_OP
+    
+//     return ans;
+// }
+
+
+constexpr auto _OPERATORS_TYPES = _get_operators_types();
+
+#define IS_BINARY(op) (_OPERATORS_TYPES[op] == OT_BINARY)
+#define IS_UNARY(op) (_OPERATORS_TYPES[op] == OT_UNARY)
 
 
 enum NodeType {
@@ -33,69 +84,63 @@ struct NodeData {
 
 
 struct Node {
-    Node* left;
     NodeData data;
-    Node* right;
+    std::vector<Node*> children;
 
     Node* parent;
 
 
-    Node(Node* left, NodeData data, Node* right)
-        : left(left), data(data), right(right), parent(nullptr) {
-            if (left)
-                left->parent = this;
-            if (right)
-                right->parent = this;
+    template <typename... Args>
+    Node(NodeData data, Args... args)
+        : data(data), parent(nullptr), children(std::initializer_list<Node*>({args...})) {
+            for (auto& child : children)
+                child->parent = this;
         }
 
     Node(const Node& another)
-        : left(another.left ? new Node(*another.left) : nullptr),
-          data(another.data),
-          right(another.right ? new Node(*another.right) : nullptr),
-          parent(nullptr) {}
+        : data(another.data), parent(nullptr) {
+            for (auto& child : another.children)
+                children.push_back(new Node(*child));
+        }
 
     Node& operator=(const Node& another) {
-        left = another.left ? new Node(*another.left) : nullptr;
         data = another.data;
-        right = another.right ? new Node(*another.right) : nullptr;
         parent = nullptr;
 
+        for (auto& child : another.children)
+            children.push_back(new Node(*child));
+        
         return *this;
     }
 
-    Node(Node* parent) 
-        : left(nullptr), 
-          data({NODE_UNDEFINED}),
-          right(nullptr), 
-          parent(parent) {}
+    Node() : parent(nullptr) {}
 
-    Node() : Node(nullptr) {}
-
+    Node* init_new_child() {
+        children.push_back(new Node());
+        children.back()->parent = this;
+        return children.back();
+    }
 
     ~Node() {
-        if (left)
-            delete left;
-        if (right)
-            delete right;
+        for (auto& child : children)
+            delete child;
     }
 };
 
 
+#define IS_OP(node) ((node).data.type == NODE_OP)
+#define IS_VAR(node) ((node).data.type == NODE_VAR)
+#define IS_CONST(node) ((node).data.type == NODE_CONST)
+#define IS_UNDEFINED(node) ((node).data.type == NODE_UNDEFINED)
+#define MAKE_CONST(value) Node({NODE_CONST, (value)})
+#define MAKE_VAR(name) Node({NODE_VAR, name})
 
-#define IS_OP(node) ((node).data.type == NodeType::NODE_OP)
-#define IS_VAR(node) ((node).data.type == NodeType::NODE_VAR)
-#define IS_CONST(node) ((node).data.type == NodeType::NODE_CONST)
-#define IS_UNDEFINED(node) ((node).data.type == NodeType::NODE_UNDEFINED)
-#define MAKE_CONST(value) Node(nullptr, {NodeType::NODE_CONST, value}, nullptr)
-#define MAKE_VAR(name) Node(nullptr, {NodeType::NODE_VAR, name}, nullptr)
-// binary
-auto MAKE_OP(const Node& left, Operator op, const Node& right) {
-    return Node(new Node(left), {NodeType::NODE_OP, op}, new Node(right));
+template <Operator op, typename... Args>
+auto MAKE_OP(Args... args) {
+    // static_assert(sizeof...(Args) == get_arg_num(op));
+    return Node({NODE_OP, op}, new Node(args)...);
 }
-//unary
-auto MAKE_OP(Operator op, const Node& right) {
-    return Node(nullptr, {NodeType::NODE_OP, op}, new Node(right));
-}
+
 #define OP(node) (std::get<Operator>((node).data.value))
 #define VALUE(node) (std::get<double>((node).data.value))
 #define NAME(node) (std::get<const char*>((node).data.value))
@@ -114,7 +159,7 @@ Node operator+(const Node& left, const Node& right) {
     if (IS_CONST(right) && EQUAL(VALUE(right), 0))
         return Node(left);
     
-    return MAKE_OP(left, Operator::OP_PLUS, right);
+    return MAKE_OP<OP_PLUS>(left, right);
 }
 
 
@@ -125,7 +170,7 @@ Node operator-(const Node& left, const Node& right) {
     if (IS_CONST(right) && EQUAL(VALUE(right), 0))
         return Node(left);
     
-    return MAKE_OP(left, Operator::OP_MINUS, right);
+    return MAKE_OP<OP_MINUS>(left, right);
 }
 
 
@@ -142,7 +187,7 @@ Node operator*(const Node& left, const Node& right) {
     if (IS_CONST(right) && EQUAL(VALUE(right), 1))
         return Node(left);
     
-    return MAKE_OP(left, Operator::OP_MUL, right);
+    return MAKE_OP<OP_MUL>(left, right);
 }
 
 
@@ -159,7 +204,7 @@ Node operator/(const Node& left, const Node& right) {
     if (IS_VAR(left) && IS_VAR(right) && !strcmp(NAME(left), NAME(right)))
         return MAKE_CONST(1);
     
-    return MAKE_OP(left, Operator::OP_DIV, right);
+    return MAKE_OP<OP_DIV>(left, right);
 }
 
 
@@ -173,7 +218,7 @@ Node operator^(const Node& left, const Node& right) {
     if ((IS_CONST(right) && EQUAL(VALUE(right), 0)) || (IS_CONST(left) && EQUAL(VALUE(left), 1)))
         return MAKE_CONST(1);
 
-    return MAKE_OP(left, Operator::OP_POW, right);
+    return MAKE_OP<OP_POW>(left, right);
 }
 
 
@@ -181,7 +226,7 @@ Node ln(const Node& node) {
     if (IS_CONST(node))
         return MAKE_CONST(log(VALUE(node)));
 
-    return MAKE_OP(Operator::OP_LN, node);
+    return MAKE_OP<OP_LN>(node);
 }
 
 
