@@ -60,7 +60,7 @@ private:
         lexer_.reset(p0);
         Node node;
 
-        while (lexeme.type != LT_EOF) {
+        while (lexeme.type != LT_EOF && lexeme.type != LT_END) {
             node.adopt(getI_());
 
             p0 = lexer_.mark();
@@ -143,7 +143,7 @@ private:
         auto instr = getG_();
 
         if (lexer_.next_lexeme().type != LT_END)
-            throw parser_exception("end eapected");
+            throw parser_exception("end expected");
 
         return MAKE_OP<OP_IF>(cond, instr);
     }
@@ -330,3 +330,8 @@ public:
         return getG_();
     }
 };
+
+
+void generate_asm(const Node& root) {
+    // TODO
+}
