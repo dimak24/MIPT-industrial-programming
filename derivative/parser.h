@@ -2,6 +2,7 @@
 
 #include <exception>
 #include <string>
+#include <string_view>
 
 #include "derivative.h"
 #include "lexer.h"
@@ -16,7 +17,7 @@ public:
     parser_exception(const char* msg)
         : msg_(msg) {}
 
-    virtual const char* what() noexcept {
+    virtual const char* what() {
         return msg_;
     }
 };
@@ -28,7 +29,7 @@ public:
     Array:                     A >> \[{E|{E,}*E}\]
 
     Expression:                E >> S{[+-]S}*
-    Summand:                   S >> M{[/*]M}*
+    Summand:                   S >> M{[/ *]M}*
     Multiplier:                M >> P|P^P
     Paranthesis:               P >> (E)|VAL
 
@@ -38,11 +39,11 @@ public:
     
     Call:                      C >> {ID|[*+]}({E,}*E)
 
-    Operation:                 OP >> ID[=]VAL
+    Operation:                 OP >> ID[=]E
     If:                        IF >> if(E) then G end;
     While:                     W >> till the cows come home repeat G end;
 
-    Instruction:               I >> OP|IF|W|C
+    Instruction:               I >> OP|IF|W|C|F
     Grammar:                   G >> {I;}+\0
 */
 
@@ -57,22 +58,53 @@ private:
             throw parser_exception("empty program");
 
         lexer_.reset(p0);
-        auto node = getI_();
+        Node node;
 
-        while (true) {
+        while (lexeme.type != LT_EOF) {
+            node.adopt(getI_());
+
             p0 = lexer_.mark();
             lexeme = lexer_.next_lexeme();
             lexer_.reset(p0);
-
-            if (lexeme.type == LT_EOF)
-                break;    
-            
-            node = getI_();                                                                             // TODO
         }
         return node;
     }
 
-    Node getC_() {}
+    Node getC_() {                                                                                      // TODO
+        auto p0 = lexer_.mark();
+        auto lexeme = lexer_.next_lexeme();
+        Node node;
+
+        if (lexeme.type == LT_PLUS)
+            node = MAKE_OP<OP_PLUS>();
+        else if (lexeme.type == LT_MUL)
+            node = MAKE_OP<OP_MUL>();
+        else {
+            lexer_.reset(p0);
+            node = MAKE_VAR(NAME(getID_()));
+        }
+
+        if (lexer_.next_lexeme().type != LT_L_PARANTHESIS) {
+            lexer_.reset(p0);
+            throw parser_exception("expected (");
+        }
+        
+        p0 = lexer_.mark();
+        if (lexer_.next_lexeme().type == LT_R_PARANTHESIS)
+            return node;
+        lexer_.reset(p0);
+        node.adopt(getE_());
+
+        while (true) {
+            p0 = lexer_.mark();
+            if (lexer_.next_lexeme().type == LT_R_PARANTHESIS)
+                return node;
+            lexer_.reset(p0);
+            if (lexer_.next_lexeme().type == LT_COMMA)
+                node.adopt(getE_());
+            throw parser_exception("wrong function's arguments");     
+        }
+    }
 
     Node getI_() {
         auto p0 = lexer_.mark();
@@ -83,12 +115,17 @@ private:
                 lexer_.reset(p0);
                 return getW_();
             } catch (parser_exception&) {
-                lexer_.reset(p0);
                 try {
-                    return getC_();
+                    lexer_.reset(p0);
+                    return getF_();
                 } catch (parser_exception&) {
                     lexer_.reset(p0);
-                    return getOP_();
+                    try {
+                        return getC_();
+                    } catch (parser_exception&) {
+                        lexer_.reset(p0);
+                        return getOP_();
+                    }
                 }
             }
         }
@@ -136,6 +173,9 @@ private:
 
         if (lexer_.next_lexeme().type != LT_R_PARANTHESIS)
             throw parser_exception(") expected");
+
+        if (lexer_.next_lexeme().type != LT_ASSIGN)
+            throw parser_exception("= expected");
 
         auto expr = getE_();
 
@@ -204,7 +244,7 @@ private:
 
     Node getP_() {
         try {
-            return getN_();
+            return getVAL_();
         }
         catch (parser_exception& e) {
             if (lexer_.next_lexeme().type != LT_L_PARANTHESIS)
@@ -239,11 +279,15 @@ private:
     }
 
     Node getID_() {
+        auto p0 = lexer_.mark();
         auto lexeme = lexer_.next_lexeme();
-        if (lexeme.type != LT_IDENTIFICATOR)
+        if (lexeme.type != LT_IDENTIFICATOR) {
+            lexer_.reset(p0);
             throw parser_exception("expected identificator");
+        }
 
-        return MAKE_VAR(std::string(lexeme.data.data(), lexeme.data.data()).c_str());
+        return MAKE_VAR(strdup(std::string(lexeme.data.data(), 
+                                           lexeme.data.size()).c_str()));
     }
 
     Node getVAL_() {
@@ -264,7 +308,7 @@ private:
             lexeme.type != LT_DIV_ASSIGN && lexeme.type != LT_POW_ASSIGN)
                 throw parser_exception("expected operator");
 
-        auto node2 = getVAL_();
+        auto node2 = getE_();
 
         switch (lexeme.type) {
             case LT_ASSIGN:

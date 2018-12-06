@@ -104,7 +104,7 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
     auto argnum = root->children.size();
     if (argnum) {
         ans += std::to_string((size_t)root->children[0]);
-        for (auto i = 1; i < argnum; ++i)
+        for (auto i = 1u; i < argnum; ++i)
             ans += ", " + std::to_string((size_t)root->children[i]);
     }
     

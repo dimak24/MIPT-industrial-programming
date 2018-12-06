@@ -61,14 +61,14 @@ struct Node {
 
     template <typename... Args>
     Node(NodeData data, Args... args)
-        : data(data), parent(nullptr), children(std::initializer_list<Node*>({args...})) {
+        : data(data), children(std::initializer_list<Node*>({args...})), parent(nullptr) {
             for (auto& child : children)
                 child->parent = this;
         }
 
     Node(const Node& another)
         : data(another.data), parent(nullptr) {
-            for (auto& child : another.children)
+            for (const auto& child : another.children)
                 children.push_back(new Node(*child));
         }
 
@@ -90,6 +90,11 @@ struct Node {
         return children.back();
     }
 
+    void adopt(const Node&& node) {
+        children.push_back(new Node(node));
+        children.back()->parent = this;
+    }
+
     ~Node() {
         for (auto& child : children)
             delete child;
@@ -106,7 +111,6 @@ struct Node {
 
 template <Operator op, typename... Args>
 auto MAKE_OP(Args... args) {
-    // static_assert(sizeof...(Args) == get_arg_num(op));
     return Node({NODE_OP, op}, new Node(args)...);
 }
 

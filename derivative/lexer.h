@@ -16,6 +16,8 @@ enum LexemeType {
     LT_REPEAT,
     LT_END,
 
+    LT_COMMA,
+
     LT_DERIVATIVE,
 
     LT_IF,
@@ -166,6 +168,9 @@ public:
                     return {LT_NE};
                 }
                 throw lexer_exception("after '!' should be '='");
+            case ',':
+                ++p_;
+                return {LT_COMMA};
             case '(':
                 ++p_;
                 return {LT_L_PARANTHESIS};
@@ -223,13 +228,12 @@ public:
                     return {LT_END};
                 }
 
-                std::string name;
+                auto p0 = p_;
                 while (p_ != end_ && (('a' <= *p_ && *p_ <= 'z') ||
-                                      ('A' <= *p_ && *p_ <= 'Z'))) {
-                    name += *p_;
+                                      ('A' <= *p_ && *p_ <= 'Z')))
                     ++p_;
-                }
-                return {LT_IDENTIFICATOR, {name.c_str(), name.size()}};
+
+                return {LT_IDENTIFICATOR, {p0, (size_t)(p_ - p0)}};
             }
         }
     }
