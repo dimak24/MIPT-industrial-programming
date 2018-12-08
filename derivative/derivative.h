@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "node.h"
-#include "auxiliary.h"
 
 
 

@@ -1,52 +1,39 @@
 #pragma once
 
+
 #include <string_view>
 #include <exception>
 #include <string>
 #include <stdlib.h>
 #include <string.h>
 
+#include "trie.h"
+
 
 enum LexemeType {
+    __LT_UNDEFINED__,
+
     LT_NUMBER,
     LT_IDENTIFICATOR,
-
-    LT_KEYWORD,
-    LT_THEN,
-    LT_REPEAT,
-    LT_END,
 
     LT_COMMA,
 
     LT_DERIVATIVE,
-
-    LT_IF,
-    LT_WHILE,
 
     LT_R_PARANTHESIS,
     LT_L_PARANTHESIS,
     LT_L_BRACKET,
     LT_R_BRACKET,
 
-    LT_PLUS,
-    LT_MINUS,
-    LT_MUL,
-    LT_DIV,
-    LT_POW,
-
-    LT_ASSIGN,
-    LT_PLUS_ASSIGN,
-    LT_MINUS_ASSIGN,
-    LT_MUL_ASSIGN,
-    LT_DIV_ASSIGN,
-    LT_POW_ASSIGN,
-
-    LT_EQ,
-    LT_NE,
-    LT_LT,
-    LT_LE,
-    LT_GT,
-    LT_GE,
+#define DEF_OP(name, mnemonic) LT_##name,
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
+#include "operators.h"
+#undef DEF_KEYWORD
+#undef DEF_ASSIGN_OP
+#undef DEF_MATH_OP
+#undef DEF_OP
 
     LT_EOF
 };
@@ -78,15 +65,26 @@ private:
     const char* end_;
     const char* p_;
 
+    Trie trie;
 
 public:
     Lexer(std::string_view prog)
         : start_(prog.data()),
           end_(prog.data() + prog.size()),
-          p_(prog.data()) {}
+          p_(prog.data()) {
+#define DEF_OP(name, mnemonic) trie.append(mnemonic, LT_##name);
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
+#include "operators.h"
+#undef DEF_KEYWORD
+#undef DEF_ASSIGN_OP
+#undef DEF_MATH_OP
+#undef DEF_OP
+          }
+
 
     ~Lexer() {}
-    Lexer() {}
 
 
     const char* mark() const {
@@ -105,69 +103,6 @@ public:
             return {LT_EOF};
         
         switch (*p_) {
-            case '=':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_EQ};
-                }
-                return {LT_ASSIGN};
-            case '+':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_PLUS_ASSIGN};    
-                }
-                return {LT_PLUS};
-            case '-':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_MINUS_ASSIGN};
-                }
-                return {LT_MINUS};
-            case '*':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_MUL_ASSIGN};
-                }
-                return {LT_MUL};
-            case '/':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_DIV_ASSIGN};
-                }
-                return {LT_DIV};
-            case '^':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_POW_ASSIGN};
-                }
-                return {LT_POW};
-            case '>':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_GE};
-                }
-                return {LT_GT};
-            case '<':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_LE};
-                }
-                return {LT_LT};
-            case '!':
-                ++p_;
-                if (p_ != end_ && *p_ == '=') {
-                    ++p_;
-                    return {LT_NE};
-                }
-                throw lexer_exception("after '!' should be '='");
             case ',':
                 ++p_;
                 return {LT_COMMA};
@@ -207,31 +142,21 @@ public:
                 return {LT_NUMBER, {p0, size_t(p_ - p0)}};
             }
             default: {
-                if (end_ - p_ >= 23 && !memcmp(p_, "till the cows come home", 23)) {
-                    p_ += 23;
-                    return {LT_WHILE};
+                int ans = 0, len = 0;
+                std::tie(ans, len) = trie.find_longest_prefix(p_, end_);
+                if (ans != __LT_UNDEFINED__) {
+                    p_ += len;
+                    return {(LexemeType)ans};
                 }
-                if (end_ - p_ >= 2 && !memcmp(p_, "if", 2)) {
-                    p_ += 2;
-                    return {LT_IF};
-                }
-                if (end_ - p_ >= 4 && !memcmp(p_, "then", 4)) {
-                    p_ += 4;
-                    return {LT_THEN};
-                }
-                if (end_ - p_ >= 6 && !memcmp(p_, "repeat", 6)) {
-                    p_ += 6;
-                    return {LT_REPEAT};
-                }
-                if (end_ - p_ >= 3 && !memcmp(p_, "end", 3)) {
-                    p_ += 3;
-                    return {LT_END};
-                }
-
+                
                 auto p0 = p_;
                 while (p_ != end_ && (('a' <= *p_ && *p_ <= 'z') ||
                                       ('A' <= *p_ && *p_ <= 'Z')))
                     ++p_;
+                
+                if (p0 == p_)
+                    throw lexer_exception("wrong operator");
+
 
                 return {LT_IDENTIFICATOR, {p0, (size_t)(p_ - p0)}};
             }

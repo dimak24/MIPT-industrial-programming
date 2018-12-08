@@ -7,6 +7,8 @@
 #include <variant>
 #include <vector>
 
+#include "auxiliary.h"
+
 
 struct serialization_deserialization_exception : public std::exception {
 private:
@@ -24,25 +26,31 @@ public:
 
 
 enum Operator {
-#define DEF_OP(name, type, mnemonic, arg_num, f) OP_##name,
+#define DEF_OP(name, mnemonic) OP_##name,
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
 #include "operators.h"
+#undef DEF_KEYWORD
+#undef DEF_ASSIGN_OP
+#undef DEF_MATH_OP
 #undef DEF_OP
-
+    
     __OP_LAST__,
 };
 
 enum OperatorType {
-    OT_OTHER,
+    OT_BINARY,
     OT_UNARY,
-    OT_BINARY
+    OT_FUNC
 };
 
 constexpr auto _get_operators_types() {
     std::array<OperatorType, __OP_LAST__> ans = {};
 
-#define DEF_OP(name, type, mnemonic, arg_num, f) ans[OP_##name] = OT_##type;
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) ans[OP_##name] = OT_##type;
 #include "operators.h"
-#undef DEF_OP
+#undef DEF_MATH_OP
 
     return ans;
 }
@@ -246,11 +254,17 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
     std::string value = "";
     if (IS_OP(*root))
         switch (OP(*root)) {
-#define DEF_OP(name, type, mnemonic, arg_num, f) \
+#define DEF_OP(name, mnemonic) \
             case OP_##name: \
                 value = mnemonic; \
                 break;
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
 #include "operators.h"
+#undef DEF_KEYWORD
+#undef DEF_ASSIGN_OP
+#undef DEF_MATH_OP
 #undef DEF_OP
             default:
                 throw serialization_deserialization_exception("unknown operator");
@@ -323,14 +337,14 @@ Node deserialize(const char* expression, char var = 'x') {
             ch = --double_end;
         }
         else {
-#define DEF_OP(name, type, mnemonic, arg_num, f) \
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) \
             if (strlen(ch) >= strlen(mnemonic) && !strncmp(ch, mnemonic, strlen(mnemonic))) { \
                 node->data = {NODE_OP, OP_##name}; \
                 ch += strlen(mnemonic) - 1; \
                 continue; \
             }
 #include "operators.h"
-#undef DEF_OP
+#undef DEF_MATH_OP
             throw serialization_deserialization_exception("could not parse expr");
         }
     }
@@ -347,7 +361,7 @@ std::string serialize(const Node& root) {
     std::string ans = "( ";
     if (IS_OP(root)) {
         switch (OP(root)) {
-#define DEF_OP(name, type, mnemonic, arg_num, f) \
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) \
             case OP_##name: \
                 if (IS_UNARY(OP_##name)) { \
                     ans += std::string(mnemonic) + serialize(*root.children[0]); \
@@ -367,7 +381,7 @@ std::string serialize(const Node& root) {
                 ans += ")"; \
                 return ans;
 #include "operators.h"
-#undef DEF_OP
+#undef DEF_MATH_OP
             default:
                 throw serialization_deserialization_exception("unknown operator");
         }

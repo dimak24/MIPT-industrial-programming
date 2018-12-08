@@ -48,7 +48,7 @@ std::string to_latex(const Node& root) {
     }
 
     switch(OP(root)) {
-#define DEF_OP(name, type, mnemonic, arg_num, f) \
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) \
         case OP_##name: { \
             if (IS_UNARY(OP_##name)) \
                 return std::string(mnemonic) + to_latex(*root.children[0]); \
@@ -64,7 +64,7 @@ std::string to_latex(const Node& root) {
             return ans +"\\right)"; \
         }
 #include "operators.h"
-#undef DEF_OP
+#undef DEF_MATH_OP
         default:
             throw latex_exception("cannot convert to latex");
     }
