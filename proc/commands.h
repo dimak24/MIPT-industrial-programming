@@ -16,11 +16,11 @@
 #define WRITE(a) { \
     printf("%lf\n", a); \
 }
-#define EPS 1e-6
+#define _EPS 1e-6
 #define ABS(a) ((a) >= 0 ? (a) : -(a))
-#define EQUAL(a, b) (ABS((a) - (b)) <= EPS)
-#define LESS(a, b) ((a) + EPS < (b))
-#define GRT(a, b) ((b) + EPS < (a)) 
+#define _EQUAL(a, b) (ABS((a) - (b)) <= _EPS)
+#define LESS(a, b) ((a) + _EPS < (b))
+#define GRT(a, b) ((b) + _EPS < (a)) 
 
 
 DEF_CMD(END, 0, {
@@ -127,7 +127,7 @@ DEF_CMD(JBE, 1, {
 DEF_CMD(JE, 1, {
     let a = POP();
     let b = POP();
-    if (EQUAL(b, a)) ip = (int)args[0];
+    if (_EQUAL(b, a)) ip = (int)args[0];
     PUSH(b);
     PUSH(a);
 })
@@ -135,7 +135,7 @@ DEF_CMD(JE, 1, {
 DEF_CMD(JNE, 1, {
     let a = POP();
     let b = POP();
-    if (!EQUAL(b, a)) ip = (int)args[0];
+    if (!_EQUAL(b, a)) ip = (int)args[0];
     PUSH(b);
     PUSH(a);
 })
@@ -211,6 +211,14 @@ DEF_CMD(ARCTH, 0, {
     PUSH(atanh(POP()));
 })
 
+DEF_CMD(LOG, 0, {
+    PUSH(log(POP()));
+})
+
+DEF_CMD(EXP, 0, {
+    PUSH(exp(POP()));
+})
+
 DEF_CMD(CALL, 1, {
     PUSH_CALL(ip);
     ip = (int)args[0];
@@ -229,6 +237,52 @@ DEF_CMD(DRAW, 3, {
               (int)args[0], (int)args[1], RAM.data(), RAM.data() + (int)args[2]);
 })
 
+DEF_CMD(GET_LOCAL, 1, {
+    PUSH(0);
+})
+
+DEF_CMD(SET_LOCAL, 1, {
+    POP();
+})
+
+DEF_CMD(PASS, 0, {})
+
+DEF_CMD(EQ, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH((double)_EQUAL(a, b));
+})
+
+DEF_CMD(NE, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH((double)!_EQUAL(a, b));
+})
+
+DEF_CMD(LT, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH((double)LESS(a, b));
+})
+
+DEF_CMD(LE, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH((double)!GRT(a, b));
+})
+
+DEF_CMD(GT, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH((double)GRT(a, b));
+})
+
+DEF_CMD(GE, 0, {
+    let a = POP();
+    let b = POP();
+    PUSH((double)!LESS(a, b));
+})
+
 #undef PUSH
 #undef POP
 #undef PUSH_REG
@@ -240,8 +294,8 @@ DEF_CMD(DRAW, 3, {
 #undef READ
 #undef WRITE
 #undef let
-#undef EPS
+#undef _EPS
 #undef ABS
 #undef LESS
-#undef EQUAL
+#undef _EQUAL
 #undef GRT

@@ -26,8 +26,8 @@ enum LexemeType {
     LT_R_BRACKET,
 
 #define DEF_OP(name, mnemonic) LT_##name,
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
-#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic, proc_command) DEF_OP(name, mnemonic)
 #define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
 #include "operators.h"
 #undef DEF_KEYWORD
@@ -73,8 +73,8 @@ public:
           end_(prog.data() + prog.size()),
           p_(prog.data()) {
 #define DEF_OP(name, mnemonic) trie.append(mnemonic, LT_##name);
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
-#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic, proc_command) DEF_OP(name, mnemonic)
 #define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
 #include "operators.h"
 #undef DEF_KEYWORD

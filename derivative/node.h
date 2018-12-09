@@ -27,8 +27,8 @@ public:
 
 enum Operator {
 #define DEF_OP(name, mnemonic) OP_##name,
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
-#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic, proc_command) DEF_OP(name, mnemonic)
 #define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
 #include "operators.h"
 #undef DEF_KEYWORD
@@ -48,7 +48,7 @@ enum OperatorType {
 constexpr auto _get_operators_types() {
     std::array<OperatorType, __OP_LAST__> ans = {};
 
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) ans[OP_##name] = OT_##type;
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) ans[OP_##name] = OT_##type;
 #include "operators.h"
 #undef DEF_MATH_OP
 
@@ -65,7 +65,8 @@ enum NodeType {
     NODE_UNDEFINED,
     NODE_VAR,
     NODE_OP,
-    NODE_CONST
+    NODE_CONST,
+    NODE_CALL,
 };
 
 
@@ -129,6 +130,7 @@ struct Node {
 #define IS_VAR(node) ((node).data.type == NODE_VAR)
 #define IS_CONST(node) ((node).data.type == NODE_CONST)
 #define IS_UNDEFINED(node) ((node).data.type == NODE_UNDEFINED)
+#define IS_CALL(node) ((node).data.type == NODE_CALL)
 #define MAKE_CONST(value) Node({NODE_CONST, (value)})
 #define MAKE_VAR(name) Node({NODE_VAR, name})
 
@@ -258,8 +260,8 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
             case OP_##name: \
                 value = mnemonic; \
                 break;
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name, mnemonic)
-#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name, mnemonic)
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) DEF_OP(name, mnemonic)
+#define DEF_ASSIGN_OP(name, mnemonic, proc_command) DEF_OP(name, mnemonic)
 #define DEF_KEYWORD(name, mnemonic) DEF_OP(name, mnemonic)
 #include "operators.h"
 #undef DEF_KEYWORD
@@ -337,7 +339,7 @@ Node deserialize(const char* expression, char var = 'x') {
             ch = --double_end;
         }
         else {
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) \
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) \
             if (strlen(ch) >= strlen(mnemonic) && !strncmp(ch, mnemonic, strlen(mnemonic))) { \
                 node->data = {NODE_OP, OP_##name}; \
                 ch += strlen(mnemonic) - 1; \
@@ -361,7 +363,7 @@ std::string serialize(const Node& root) {
     std::string ans = "( ";
     if (IS_OP(root)) {
         switch (OP(root)) {
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) \
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) \
             case OP_##name: \
                 if (IS_UNARY(OP_##name)) { \
                     ans += std::string(mnemonic) + serialize(*root.children[0]); \
@@ -376,7 +378,7 @@ std::string serialize(const Node& root) {
                 ans += std::string(mnemonic) + "("; \
                 if (arg_num) \
                     ans += serialize(*root.children[0]); \
-                for (auto i = 0; i < arg_num; ++i) \
+                for (auto i = 1; i < arg_num; ++i) \
                     ans += ", " + serialize(*root.children[i]); \
                 ans += ")"; \
                 return ans;

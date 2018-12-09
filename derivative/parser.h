@@ -7,6 +7,7 @@
 #include "derivative.h"
 #include "lexer.h"
 #include "node.h"
+#include "../proc/processor.h"
 
 
 class parser_exception : std::exception {
@@ -80,7 +81,7 @@ private:
         auto argnum = -2;
 
         if (false);
-#define DEF_MATH_OP(name, _type, mnemonic, latex_command, arg_num) \
+#define DEF_MATH_OP(name, _type, mnemonic, latex_command, arg_num, proc_command) \
         else if (!strcmp(#_type, "FUNC") && lexeme.type == LT_##name) { \
             node = MAKE_OP<OP_##name>(); \
             argnum = arg_num; \
@@ -219,8 +220,8 @@ private:
                 case LT_##name: \
                     node = MAKE_OP<OP_##name>(node, node1); \
                     break;
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name)
-// #define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name)
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) DEF_OP(name)
+// #define DEF_ASSIGN_OP(name, mnemonic, proc_command) DEF_OP(name)
 #include "operators.h"
 // #undef DEF_ASSIGN_OP
 #undef DEF_MATH_OP
@@ -371,8 +372,8 @@ private:
 #define DEF_OP(name) \
                 case LT_##name: \
                     return MAKE_OP<OP_##name>(node, node2);
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) DEF_OP(name)
-#define DEF_ASSIGN_OP(name, mnemonic) DEF_OP(name)
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) DEF_OP(name)
+#define DEF_ASSIGN_OP(name, mnemonic, proc_command) DEF_OP(name)
 #include "operators.h"
 #undef DEF_ASSIGN_OP
 #undef DEF_MATH_OP
@@ -401,39 +402,93 @@ public:
 std::vector<std::map<std::string, int>> locals;
 
 
+
+void generate_asm_CALL(Node*);
+int generate_block(Node*);
+void generate_asm_EXPR(Node*);
+void generate_asm_OP(Node*); 
+
+
 void generate_asm_EXPR(Node* expr) {
-    if (IS_VAR(*expr->children[0])) {
-        // get_local locals[NAME]
-    }
+    if (IS_OP(*expr))
+        switch (OP(*expr)) {
+#define DEF_MATH_OP(name, type, mnemonic, latex_mnemonic, arg_num, proc_command) \
+            case OP_##name: { \
+                for (auto i = 0; i < arg_num; ++i) \
+                    if (IS_VAR(*expr->children[i])) { \
+                        fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, stdin); \
+                        fwrite(new double(locals.back()[std::string(NAME(*expr->children[i]))]), \
+                               1, sizeof(double), stdin); \
+                    } \
+                    else if (IS_CONST(*expr->children[i])) { \
+                        fwrite(new unsigned char(CMD_PUSH), 1, 1, stdin); \
+                        fwrite(new double(VALUE(*expr->children[i])), 1, sizeof(double), stdin); \
+                    } \
+                    else if (IS_CALL(*expr->children[i])) \
+                        generate_asm_CALL(expr->children[i]); \
+                    else \
+                        generate_asm_OP(expr->children[i]); \
+                fwrite(new unsigned char(CMD_##proc_command), 1, 1, stdin); \
+                break; \
+            }
+#include "operators.h"
+#undef DEF_MATH_OP
+            default: __builtin_unreachable();
+        }
+    else if (IS_CALL(*expr))
+        generate_asm_CALL(expr);
     else
-        generate_asm_EXPR(expr->children[0]);
-    
-    if (IS_VAR(*expr->children[1])) {
-        // get_local locals[NAME]
-    }
-    else
-        generate_asm_EXPR(expr->children[1]);
-    
-    // op
+        throw parser_exception("wrong operator");
+}
+
+void generate_asm_OP(Node* op) {
+    std::string name = NAME(*op->children[0]);
+    if (locals.back().find(name) == locals.back().end())
+        throw parser_exception("variable has not been declared yet");
+
+    fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, stdin);
+    fwrite(new double(locals.back()[name]), 1, sizeof(double), stdin);
+
+    generate_asm_EXPR(op->children[1]);
+
+    switch (OP(*op)) {
+#define DEF_ASSIGN_OP(name, mnemonic, proc_command) \
+            case OP_##name: \
+                fwrite(new unsigned char(CMD_##proc_command), 1, 1, stdin); \
+                break;
+#include "operators.h"
+#undef DEF_ASSIGN_OP
+            default: __builtin_unreachable();
+        }
+
+    fwrite(new unsigned char(CMD_SET_LOCAL), 1, 1, stdin);
+    fwrite(new double(locals.back()[name]), 1, sizeof(double), stdin);
 }
 
 void generate_asm_CALL(Node* call) {
-    std::string name = NAME(vd->children[0]);
+    std::string name = NAME(*call->children[0]);
     if (locals.back().find(name) != locals.back().end())
         throw parser_exception("function has already been declared");
     for (auto child : call->children)
         if (IS_VAR(*child)) {
-            // get_local locals[NAME(*child)]
+            fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, stdin);
+            fwrite(new double(locals.back()[std::string(NAME(*child))]), 1, sizeof(double), stdin);
+        }
+        else if (IS_CONST(*child)) {
+            fwrite(new unsigned char(CMD_PUSH), 1, 1, stdin);
+            fwrite(new double(VALUE(*child)), 1, sizeof(double), stdin);
         }
         else if (IS_CALL(*child))
             generate_asm_CALL(child);
         else
             generate_asm_EXPR(child);
-    // call name
+    
+    fwrite(new unsigned char(CMD_CALL), 1, 1, stdin);
+    fwrite(name.c_str(), name.size() + 1, 1, stdin);
 }
 
 void generate_asm_FD(Node* fd) {
-    std::string name = NAME(fd->children[0]);
+    std::string name = NAME(*fd->children[0]);
     if (locals.back().find(name) != locals.back().end())
         throw parser_exception("function has already been declared");
     locals.back()[name] = locals.back().size();
@@ -447,24 +502,15 @@ void generate_asm_FD(Node* fd) {
 }
 
 void generate_asm_VD(Node* vd) {
-    std::string name = NAME(vd->children[0]);
+    std::string name = NAME(*vd->children[0]);
     if (locals.back().find(name) != locals.back().end())
         throw parser_exception("variable has already been declared");
     locals.back()[name] = locals.back().size();
+
     generate_asm_EXPR(vd->children[1]);
-    // set_local locals[name]
-}
-
-
-
-void generate_asm_OP(Node* op) {
-    std::string name = NAME(op->children[0]);
-    if (locals.back().find(name) == locals.back().end())
-        throw parser_exception("variable has not been declared yet");
-    // get_local locals[name]
-    generate_asm_EXPR(op->children[1]);
-    // op
-    // set_local locals[name]
+    
+    fwrite(new unsigned char(CMD_SET_LOCAL), 1, 1, stdin);
+    fwrite(new double(locals.back()[name]), 1, sizeof(double), stdin);
 }
 
 int generate_block(Node* root) {
@@ -479,7 +525,7 @@ int generate_block(Node* root) {
             else
                 generate_asm_OP(child);
         }
-        else if (IS_CALL(child))
+        else if (IS_CALL(*child))
             generate_asm_CALL(child);
         else
             throw parser_exception("WTF");
@@ -493,4 +539,5 @@ void generate_asm(Node* root) {
     // update nlocals
     // calculate and update nskip
     // leave
+    // call ___main_dk_
 }

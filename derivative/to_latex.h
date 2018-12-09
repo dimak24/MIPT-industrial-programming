@@ -48,7 +48,7 @@ std::string to_latex(const Node& root) {
     }
 
     switch(OP(root)) {
-#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num) \
+#define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) \
         case OP_##name: { \
             if (IS_UNARY(OP_##name)) \
                 return std::string(mnemonic) + to_latex(*root.children[0]); \
