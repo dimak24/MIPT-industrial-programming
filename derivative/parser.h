@@ -47,10 +47,6 @@ public:
 
     Array:                     A >> \[{CE|{CE,}*CE}\]
 
-
-
-    
-
 */
 
 class Parser {
@@ -402,6 +398,99 @@ public:
 };
 
 
-void generate_asm(const Node& root) {
-    // TODO
+std::vector<std::map<std::string, int>> locals;
+
+
+void generate_asm_EXPR(Node* expr) {
+    if (IS_VAR(*expr->children[0])) {
+        // get_local locals[NAME]
+    }
+    else
+        generate_asm_EXPR(expr->children[0]);
+    
+    if (IS_VAR(*expr->children[1])) {
+        // get_local locals[NAME]
+    }
+    else
+        generate_asm_EXPR(expr->children[1]);
+    
+    // op
+}
+
+void generate_asm_CALL(Node* call) {
+    std::string name = NAME(vd->children[0]);
+    if (locals.back().find(name) != locals.back().end())
+        throw parser_exception("function has already been declared");
+    for (auto child : call->children)
+        if (IS_VAR(*child)) {
+            // get_local locals[NAME(*child)]
+        }
+        else if (IS_CALL(*child))
+            generate_asm_CALL(child);
+        else
+            generate_asm_EXPR(child);
+    // call name
+}
+
+void generate_asm_FD(Node* fd) {
+    std::string name = NAME(fd->children[0]);
+    if (locals.back().find(name) != locals.back().end())
+        throw parser_exception("function has already been declared");
+    locals.back()[name] = locals.back().size();
+    // fd name fd->children[1]->children.size() nlocals nskip
+    locals.emplace_back();
+    for (auto i = 0; i < fd->children[1]->children.size(); ++i)
+        locals.back()[NAME(*fd->children[1]->children[i])] = -i - 1;
+    auto nlocals = generate_block(fd);
+    // update nlocals
+    // calculate and update nskip
+}
+
+void generate_asm_VD(Node* vd) {
+    std::string name = NAME(vd->children[0]);
+    if (locals.back().find(name) != locals.back().end())
+        throw parser_exception("variable has already been declared");
+    locals.back()[name] = locals.back().size();
+    generate_asm_EXPR(vd->children[1]);
+    // set_local locals[name]
+}
+
+
+
+void generate_asm_OP(Node* op) {
+    std::string name = NAME(op->children[0]);
+    if (locals.back().find(name) == locals.back().end())
+        throw parser_exception("variable has not been declared yet");
+    // get_local locals[name]
+    generate_asm_EXPR(op->children[1]);
+    // op
+    // set_local locals[name]
+}
+
+int generate_block(Node* root) {
+    for (auto child : root->children)
+        if (IS_OP(*child)) {
+            if (OP(*child) == OP_DECLARE) {
+                if (IS_UNDEFINED(*child->children[1]))
+                    generate_asm_FD(child);
+                else
+                    generate_asm_VD(child);
+            }
+            else
+                generate_asm_OP(child);
+        }
+        else if (IS_CALL(child))
+            generate_asm_CALL(child);
+        else
+            throw parser_exception("WTF");
+    return locals.back().size();
+}
+
+void generate_asm(Node* root) {
+    // fd ___main_dk_ 0 nlocals nskip
+    locals.emplace_back();
+    auto nlocals = generate_block(root);
+    // update nlocals
+    // calculate and update nskip
+    // leave
 }
