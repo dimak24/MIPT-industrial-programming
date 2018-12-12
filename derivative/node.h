@@ -97,6 +97,9 @@ struct Node {
         }
 
     Node& operator=(const Node& another) {
+        // fix it
+        children.clear();
+
         data = another.data;
         parent = nullptr;
 
@@ -251,6 +254,10 @@ Node& operator/=(Node& left, const Node& right) {
 
 Node& operator^=(Node& left, const Node& right) {
     return left = left ^ right;
+}
+
+Node operator-(const Node& node) {
+    return MAKE_OP<OP_MINUS>(MAKE_CONST(0), node);
 }
 
 

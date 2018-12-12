@@ -44,7 +44,7 @@ Node derivative(const Node& node, const char* var = "x") {
         return MAKE_CONST(!strcmp(var, NAME(node)));
     switch (OP(node)) {
         case OP_PLUS:
-            return dL + dR;
+            return dL + dR; 
         case OP_MINUS:
             return dL - dR;
         case OP_MUL:
@@ -56,6 +56,10 @@ Node derivative(const Node& node, const char* var = "x") {
                                : (cL ^ cR) * (dR * ln(cL) + (cR * dL) / cL);
         case OP_LN:
             return dL / cL;
+        case OP_SIN:
+            return dL * MAKE_OP<OP_COS>(L);
+        case OP_COS:
+            return -dL * MAKE_OP<OP_SIN>(L);
         default:
             throw derivative_exception("unknown operator");
     }

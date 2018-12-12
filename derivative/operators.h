@@ -11,10 +11,15 @@ DEF_MATH_OP(LT, BINARY, "<", "<", 2, LT)
 DEF_MATH_OP(LE, BINARY, "<=", "\\le", 2, LE)
 DEF_MATH_OP(GT, BINARY, ">", ">", 2, GT)
 DEF_MATH_OP(GE, BINARY, ">=", "\\ge", 2, GE)
+DEF_MATH_OP(SQRT, FUNC, "sqrt", "\\sqrt", 1, SQRT)
+DEF_MATH_OP(SQR, FUNC, "sqrt", "\\sqrt", 1, SQR)
+DEF_MATH_OP(SIN, FUNC, "sin", "\\sin", 1, SIN)
+DEF_MATH_OP(COS, FUNC, "cos", "\\cos", 1, COS)
 #endif
 
 #ifdef DEF_BUILTIN_FUNC
 DEF_BUILTIN_FUNC("print", 1, OUT)
+DEF_BUILTIN_FUNC("read", 0, IN)
 #endif
 
 #ifdef DEF_ASSIGN_OP
