@@ -93,7 +93,7 @@ private:
 #undef DEF_MATH_OP
         else {
             lexer_.reset(p0);
-            node = MAKE_VAR(NAME(getID_()));
+            node = Node({NODE_CALL, NAME(getID_())});
         }
         if (lexer_.next_lexeme().type != LT_L_PARANTHESIS) {
             lexer_.reset(p0);
@@ -201,7 +201,7 @@ private:
         if (lexer_.next_lexeme().type != LT_R_PARANTHESIS)
             throw parser_exception(") expected");
 
-        if (lexer_.next_lexeme().type != LT_ASSIGN)
+        if (lexer_.next_lexeme().type != LT_DECLARE)
             throw parser_exception("= expected");
 
         auto expr = getCE_();
@@ -209,7 +209,8 @@ private:
         if (lexer_.next_lexeme().type != LT_DERIVATIVE)
             throw parser_exception("\' expected");
 
-        return derivative(expr, NAME(var));                                                             // TODO: make it a function
+        return MAKE_OP<OP_DECLARE>(name, Node({NODE_UNDEFINED}, new Node(var)), 
+                                         derivative(expr, NAME(var)));
     }
 
     Node getCE_() {
@@ -303,13 +304,16 @@ private:
     }
 
     Node getP_() {
+        auto p0 = lexer_.mark();
         try {
-            return getVAL_();
+            return getC_();
         }
         catch (parser_exception&) {
+            lexer_.reset(p0);
             try {
-                return getC_();
+                return getVAL_();
             } catch (parser_exception&) {
+                lexer_.reset(p0);
                 if (lexer_.next_lexeme().type != LT_L_PARANTHESIS)
                     throw parser_exception("expected '('");
 
@@ -419,6 +423,7 @@ public:
 
 
 std::vector<std::map<std::string, int>> locals;
+std::map<std::string, int> call_start;
 
 
 void generate_asm_CALL(Node*, FILE*);
@@ -428,6 +433,7 @@ void generate_asm_OP(Node*, FILE*);
 
 
 void generate_asm_EXPR(Node* expr, FILE* memstream) {
+puts("EXPR");
     if (IS_OP(*expr))
         switch (OP(*expr)) {
 #define DEF_MATH_OP(name, type, mnemonic, latex_mnemonic, arg_num, proc_command) \
@@ -436,16 +442,17 @@ void generate_asm_EXPR(Node* expr, FILE* memstream) {
                     if (IS_VAR(*expr->children[i])) { \
                         fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, memstream); \
                         fwrite(new double(locals.back()[std::string(NAME(*expr->children[i]))]), \
-                               1, sizeof(double), memstream); \
+                               sizeof(double), 1, memstream); \
                     } \
                     else if (IS_CONST(*expr->children[i])) { \
                         fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream); \
-                        fwrite(&VALUE(*expr->children[i]), 1, sizeof(double), memstream); \
+                        fwrite(new double(0), sizeof(double), 1, memstream); \
+                        fwrite(&VALUE(*expr->children[i]), sizeof(double), 1, memstream); \
                     } \
                     else if (IS_CALL(*expr->children[i])) \
                         generate_asm_CALL(expr->children[i], memstream); \
                     else \
-                        generate_asm_OP(expr->children[i], memstream); \
+                        generate_asm_EXPR(expr->children[i], memstream); \
                 fwrite(new unsigned char(CMD_##proc_command), 1, 1, memstream); \
                 break; \
             }
@@ -455,71 +462,143 @@ void generate_asm_EXPR(Node* expr, FILE* memstream) {
         }
     else if (IS_CALL(*expr))
         generate_asm_CALL(expr, memstream);
-    else if (IS_CONST(*expr))
-        fwrite(&VALUE(*expr), 1, sizeof(double), memstream);
+    else if (IS_CONST(*expr)) {
+        fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream);
+        fwrite(new double(0), sizeof(double), 1, memstream);
+        fwrite(&VALUE(*expr), sizeof(double), 1, memstream);
+    }
     else
         throw parser_exception("wrong operator");
 }
 
 void generate_asm_OP(Node* op, FILE* memstream) {
-    std::string name = NAME(*op->children[0]);
-    if (locals.back().find(name) == locals.back().end())
-        throw parser_exception("variable has not been declared yet");
-
-    fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, memstream);
-    fwrite(new double(locals.back()[name]), 1, sizeof(double), memstream);
-
-    generate_asm_EXPR(op->children[1], memstream);
-
+puts("OP");
     switch (OP(*op)) {
 #define DEF_ASSIGN_OP(name, mnemonic, proc_command) \
-            case OP_##name: \
+            case OP_##name: { \
+                std::string name1 = NAME(*op->children[0]); \
+                if (!locals.back().count(name1)) \
+                    throw parser_exception("variable has not been declared yet"); \
+                \
+                fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, memstream); \
+                fwrite(new double(locals.back()[name1]), sizeof(double), 1, memstream); \
+                \
+                generate_asm_EXPR(op->children[1], memstream); \
+                \
                 fwrite(new unsigned char(CMD_##proc_command), 1, 1, memstream); \
-                break;
+                \
+                fwrite(new unsigned char(CMD_SET_LOCAL), 1, 1, memstream); \
+                fwrite(new double(locals.back()[name1]), sizeof(double), 1, memstream); \
+                break; \
+            }
 #include "operators.h"
 #undef DEF_ASSIGN_OP
+            case OP_IF: {
+puts("IF");
+                auto cond = op->children[0];
+                generate_asm_EXPR(cond, memstream);
+
+                fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream);
+                fwrite(new double(0), sizeof(double), 1, memstream);
+                fwrite(new double(0), sizeof(double), 1, memstream);
+                fwrite(new unsigned char(CMD_JE), 1, 1, memstream);
+            
+                auto label_place = ftell(memstream);
+                fwrite(new double(0), sizeof(double), 1, memstream);
+                
+                generate_block(op->children[1], memstream);
+
+                auto last = ftell(memstream);
+
+                fseek(memstream, label_place, SEEK_SET);
+                fwrite(new double(last + strlen(SGN)), sizeof(double), 1, memstream);
+
+                fseek(memstream, last, SEEK_SET);
+                break;
+            }
+            case OP_WHILE: {
+puts("WHILE");
+                auto start = ftell(memstream);
+
+                generate_block(op->children[0], memstream);
+
+                fwrite(new unsigned char(CMD_JMP), 1, 1, memstream);
+                fwrite(new double(start + strlen(SGN)), sizeof(double), 1, memstream);
+                break;
+            }
+
             default: __builtin_unreachable();
         }
-
-    fwrite(new unsigned char(CMD_SET_LOCAL), 1, 1, memstream);
-    fwrite(new double(locals.back()[name]), 1, sizeof(double), memstream);
 }
 
 void generate_asm_CALL(Node* call, FILE* memstream) {
-    std::string name = NAME(*call->children[0]);
-    if (locals.back().find(name) != locals.back().end())
-        throw parser_exception("function has already been declared");
-    for (auto child : call->children)
+puts("CALL");
+    std::string name = NAME(*call);
+    // reverse!!
+    for (auto it_child = call->children.rbegin(); it_child != call->children.rend(); ++it_child) {
+        auto child = *it_child;
         if (IS_VAR(*child)) {
             fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, memstream);
-            fwrite(new double(locals.back()[std::string(NAME(*child))]), 1, sizeof(double), memstream);
+            fwrite(new double(locals.back()[std::string(NAME(*child))]), sizeof(double), 1, memstream);
         }
         else if (IS_CONST(*child)) {
             fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream);
-            fwrite(new double(VALUE(*child)), 1, sizeof(double), memstream);
+            fwrite(new double(0), sizeof(double), 1, memstream);
+            fwrite(new double(VALUE(*child)), sizeof(double), 1, memstream);
         }
         else if (IS_CALL(*child))
             generate_asm_CALL(child, memstream);
         else
             generate_asm_EXPR(child, memstream);
-    
-    fwrite(new unsigned char(CMD_CALL), 1, 1, memstream);
-    fwrite(name.c_str(), name.size() + 1, 1, memstream);
+    }
+
+    if (false);
+#define DEF_BUILTIN_FUNC(mnemonic, nargs, proc_command) \
+    else if (name == mnemonic) \
+        fwrite(new unsigned char(CMD_##proc_command), 1, 1, memstream);
+#include "operators.h"
+#undef DEF_BUILTIN_FUNC
+    else if (!locals.back().count(name))
+        throw parser_exception("function has not been declared yet");
+    else {
+        fwrite(new unsigned char(CMD_CALL), 1, 1, memstream);
+        fwrite(new double(call_start[name]), sizeof(double), 1, memstream);
+    }
 }
 
 void generate_asm_FD(Node* fd, FILE* memstream) {
+puts("FD");
     std::string name = NAME(*fd->children[0]);
-    if (locals.back().find(name) != locals.back().end())
+    if (locals.back().count(name))
         throw parser_exception("function has already been declared");
     locals.back()[name] = locals.back().size();
-    // fd name fd->children[1]->children.size() nlocals nskip
+
+    fwrite(new unsigned char(CMD_FD), 1, 1, memstream);
+    auto locals_offset = ftell(memstream);
+
+    fwrite(new double(fd->children[1]->children.size()), sizeof(double), 1, memstream);
+    call_start[name] = ftell(memstream) + strlen(SGN);                                               // TODO
+    fwrite(new double(0), sizeof(double), 1, memstream);
+
     locals.emplace_back();
-    for (auto i = 0; i < fd->children[1]->children.size(); ++i)
-        locals.back()[NAME(*fd->children[1]->children[i])] = -i - 1;
-    auto nlocals = generate_block(fd, memstream);
-    // update nlocals
-    // calculate and update nskip
+    
+    auto n = fd->children[1]->children.size();
+    for (auto i = 0; i < n; ++i)
+        locals.back()[NAME(*fd->children[1]->children[i])] = i - n;
+    
+    generate_asm_EXPR(fd->children[2], memstream);
+    fwrite(new unsigned char(CMD_ENDFUNC), 1, 1, memstream);
+
+    auto from = ftell(memstream);
+
+    fseek(memstream, locals_offset, SEEK_SET);
+    fwrite(new double(from + strlen(SGN)), sizeof(double), 1, memstream);
+    fwrite(new double(0) /*&nlocals*/, sizeof(double), 1, memstream);
+    fseek(memstream, from, SEEK_SET);
+
+    locals.pop_back();  
 }
+
 
 void generate_asm_VD(Node* vd, FILE* memstream) {
     std::string name = NAME(*vd->children[0]);
@@ -530,8 +609,9 @@ void generate_asm_VD(Node* vd, FILE* memstream) {
     generate_asm_EXPR(vd->children[1], memstream);
     
     fwrite(new unsigned char(CMD_SET_LOCAL), 1, 1, memstream);
-    fwrite(new double(locals.back()[name]), 1, sizeof(double), memstream);
+    fwrite(new double(locals.back()[name]), sizeof(double), 1, memstream);
 }
+
 
 int generate_block(Node* root, FILE* memstream) {
     for (auto child : root->children)
@@ -552,44 +632,48 @@ int generate_block(Node* root, FILE* memstream) {
     return locals.back().size();
 }
 
+
 void generate_asm(Node* root) {
     char* buf = nullptr;
     size_t nbuf = 0;
     FILE* memstream = open_memstream(&buf, &nbuf);
 
-    locals.emplace_back();
-    
-    auto name = "___main_dk_";
-    fwrite(new unsigned char(CMD_FD), 1, 1, memstream);
-    fwrite(name, 1, strlen(name) + 1, memstream);
-    fwrite(new double(0), 1, sizeof(double), memstream);
-
-    auto offset = ftell(memstream);
-
-    fwrite(new double(0), 1, sizeof(double), memstream);
-    fwrite(new double(0), 1, sizeof(double), memstream);
-
-    auto nlocals = generate_block(root, memstream);
-
-    auto nskip = ftell(memstream) - offset - 2 * sizeof(double);
-
-    fseek(memstream, offset, SEEK_SET);
-
-    fwrite(&nlocals, 1, sizeof(double), memstream);
-    fwrite(&nskip, 1, sizeof(double), memstream);
-
-    fseek(memstream, nskip, SEEK_CUR);
-
-    fwrite(new unsigned char(CMD_CALL), 1, 1, memstream);
-    fwrite(&name, 1, strlen(name) + 1, memstream);
-
-    fclose(memstream);
+    auto begin = ftell(memstream);
 
     FILE* out = fopen("a.dk", "w");
     if (!out) {
         perror("a.dk");
         exit(1);
     }
+    fprintf(out, SGN);
+
+    locals.emplace_back();
+
+    // fd
+    fwrite(new unsigned char(CMD_FD), 1, 1, memstream);
+    auto offset = ftell(memstream);
+
+    // endfunc
+    fwrite(new double(0), sizeof(double), 1, memstream);
+    // nlocals
+    fwrite(new double(0), sizeof(double), 1, memstream);
+
+    auto nlocals = generate_block(root, memstream);
+    fwrite(new unsigned char(CMD_ENDFUNC), 1, 1, memstream);
+
+    auto from = ftell(memstream);
+    
+    // update
+    fseek(memstream, offset, SEEK_SET);
+    fwrite(new double(from - begin + strlen(SGN)), sizeof(double), 1, memstream);
+    fwrite(&nlocals, sizeof(double), 1, memstream);
+
+    fseek(memstream, from, SEEK_SET);
+
+    fwrite(new unsigned char(CMD_CALL), 1, 1, memstream);
+    fwrite(new double(strlen(SGN) + 1 + sizeof(double)), sizeof(double), 1, memstream);
+
+    fclose(memstream);
 
     fwrite(buf, nbuf, 1, out);
 

@@ -13,6 +13,10 @@ DEF_MATH_OP(GT, BINARY, ">", ">", 2, GT)
 DEF_MATH_OP(GE, BINARY, ">=", "\\ge", 2, GE)
 #endif
 
+#ifdef DEF_BUILTIN_FUNC
+DEF_BUILTIN_FUNC("print", 1, OUT)
+#endif
+
 #ifdef DEF_ASSIGN_OP
 DEF_ASSIGN_OP(ASSIGN, "=", PASS)
 DEF_ASSIGN_OP(PLUS_ASSIGN, "+=", ADD)

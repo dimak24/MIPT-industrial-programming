@@ -97,19 +97,19 @@ int main(int argc, char** argv) {
                         }
                     }
                 }
-                else if (index == CMD_JMP || index == CMD_JA || index == CMD_JB || index == CMD_JE || 
-                         index == CMD_JNE || index == CMD_JAE || index == CMD_JBE)
-                    fprintf(raw, " %d", lines_begin[(int)tmp[0]]);
-                else if (index == CMD_CALL)
-                    fprintf(raw, " %d", lines_begin[(int)tmp[0]] - 1);
-                else if (index == CMD_FUNC)
-                    fprintf(raw, " %d", line);
+                // else if (index == CMD_JMP || index == CMD_JA || index == CMD_JB || index == CMD_JE || 
+                //          index == CMD_JNE || index == CMD_JAE || index == CMD_JBE)
+                //     fprintf(raw, " %d", lines_begin[(int)tmp[0]]);
+                // else if (index == CMD_CALL)
+                //     fprintf(raw, " f%d", lines_begin[(int)tmp[0]]);
                 else
                     fprintf(raw, " %lf", *(double*)cur);
+                // if (i == 1 && index == CMD_FD)
+                //     fprintf(raw, " (f%d)", lines_begin[(int)tmp[0]]);
                 cur += sizeof(double);
             }
 
-            if (index == CMD_FUNC) 
+            if (index == CMD_FD) 
                 ++indent;
             
             fprintf(raw, "\n");

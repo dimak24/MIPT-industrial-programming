@@ -1,7 +1,7 @@
 
   # function fib replaces top element in the stack with the n-th fibonacci number
 
-FUNC fib
+FD fib 1 0
 PUSH 1
 JBE :1
 POP

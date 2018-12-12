@@ -1,6 +1,9 @@
 :kek
-FUNC double 
+FD double 1 3
+GET_ARG 0
 PUSH 2
+SET_LOCAL 2
+GET_LOCAL 2
 MUL
 ENDFUNC
 IN

@@ -173,8 +173,8 @@ public:
                get_check_sum_ptr_() &&
                *get_third_canary_ptr_() == TRUE_CANARY__ &&
                *get_second_canary_ptr_() == TRUE_CANARY__ &&
-               *get_first_canary_ptr_() == TRUE_CANARY__ &&
-               *get_check_sum_ptr_() == sum_up_();
+               *get_first_canary_ptr_() == TRUE_CANARY__;
+               // && *get_check_sum_ptr_() == sum_up_();
     }
 
     void dump(FILE* file = nullptr) const {
@@ -248,5 +248,21 @@ public:
 
     bool operator!() const {
         return !ok();
+    }
+
+    T& operator[](size_t index) {
+        return *((T*)(buffer_ + sizeof(unsigned int) + index * sizeof(T)));
+    }
+
+    T& top() {
+        return operator[](size() - 1);
+    }
+
+    const T& operator[](size_t index) const {
+        return *((T*)(buffer_ + sizeof(unsigned int) + index * sizeof(T)));
+    }
+
+    const T& top() const {
+        return operator[](size() - 1);
     }
 };

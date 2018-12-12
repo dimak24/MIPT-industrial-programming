@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
 
     Stack<double> stack;
     Stack<uintptr_t> call_stack;
+    Stack<size_t> locals_begin;
 
     double args[__MAXIMAL_ARGS_NUMBER__];
     bool end = false;

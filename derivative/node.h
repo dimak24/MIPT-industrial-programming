@@ -114,7 +114,7 @@ struct Node {
         return children.back();
     }
 
-    void adopt(const Node&& node) {
+    void adopt(const Node& node) {
         children.push_back(new Node(node));
         children.back()->parent = this;
     }
@@ -137,6 +137,11 @@ struct Node {
 template <Operator op, typename... Args>
 auto MAKE_OP(Args... args) {
     return Node({NODE_OP, op}, new Node(args)...);
+}
+
+template <typename... Args>
+auto MAKE_CALL(const char* name, const Node& func, Args... args) {
+    return Node({NODE_CALL, name}, new Node({NODE_UNDEFINED}, new Node(args)...), new Node(func));
 }
 
 #define OP(node) (std::get<Operator>((node).data.value))
@@ -273,7 +278,7 @@ void append_dump(Node* root, std::string& ans, unsigned indent = 0) {
         }
     else if (IS_CONST(*root))
         value = std::to_string(VALUE(*root));
-    else if (IS_VAR(*root))
+    else if (IS_VAR(*root) || IS_CALL(*root))
         value = NAME(*root);
     else /* UNDEFINED */
         value = "_";

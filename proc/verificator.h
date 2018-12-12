@@ -51,7 +51,7 @@ static void verify_command(unsigned char command, const char* cur, const char* b
     else if (command == CMD_JMP || 
              command == CMD_JA || command == CMD_JB || command == CMD_JNE ||
              command == CMD_JAE || command == CMD_JBE || command == CMD_JE ||
-             command == CMD_CALL || command == CMD_FUNC)
+             command == CMD_CALL || command == CMD_FD)
         verify_jump(command, cur, beg, fin);
     else if (command == CMD_DRAW)
         verify_draw(cur, beg);

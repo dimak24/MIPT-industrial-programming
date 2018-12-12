@@ -6,6 +6,8 @@
 #define PUSH_MEM(index) PUSH(RAM[index])
 #define POP_MEM(index) RAM[index] = POP()
 #define PUSH_CALL(current_ip) call_stack.push(current_ip)
+#define PUSH_LOCALS_BEGIN(index) locals_begin.push(index)
+#define LOCALS_BEGIN() locals_begin.top()
 #define POP_CALL() call_stack.pop()
 #define let double
 #define READ() ({ \
@@ -96,48 +98,36 @@ DEF_CMD(JA, 1, {
     let a = POP();
     let b = POP();
     if (GRT(b, a)) ip = (int)args[0];
-    PUSH(b);
-    PUSH(a);
 })
 
 DEF_CMD(JAE, 1, {
     let a = POP();
     let b = POP();
     if (!LESS(b, a)) ip = (int)args[0];
-    PUSH(b);
-    PUSH(a);
 })
 
 DEF_CMD(JB, 1, {
     let a = POP();
     let b = POP();
     if (LESS(b, a)) ip = (int)args[0];
-    PUSH(b);
-    PUSH(a);
 })
 
 DEF_CMD(JBE, 1, {
     let a = POP();
     let b = POP();
     if (!GRT(b, a)) ip = (int)args[0];
-    PUSH(b);
-    PUSH(a);
 })
 
 DEF_CMD(JE, 1, {
     let a = POP();
     let b = POP();
     if (_EQUAL(b, a)) ip = (int)args[0];
-    PUSH(b);
-    PUSH(a);
 })
 
 DEF_CMD(JNE, 1, {
     let a = POP();
     let b = POP();
     if (!_EQUAL(b, a)) ip = (int)args[0];
-    PUSH(b);
-    PUSH(a);
 })
 
 DEF_CMD(INC, 0, {
@@ -222,13 +212,27 @@ DEF_CMD(EXP, 0, {
 DEF_CMD(CALL, 1, {
     PUSH_CALL(ip);
     ip = (int)args[0];
+    PUSH_LOCALS_BEGIN(stack.size());
+    let a = *(double*)(prog + ip);
+    for (size_t i = 0; i < a; ++i)
+        PUSH(0);
+    ip += sizeof(double);
 })
 
 DEF_CMD(ENDFUNC, 0, {
     ip = POP_CALL();
 })
 
-DEF_CMD(FUNC, 1, {
+DEF_CMD(LEAVE, 0, {
+    ip = POP_CALL();
+})
+
+DEF_CMD(RET, 1, {
+    ip = POP_CALL();
+    PUSH(args[0]);
+})
+
+DEF_CMD(FD, 2, {
     ip = (int)args[0];
 })
 
@@ -238,11 +242,15 @@ DEF_CMD(DRAW, 3, {
 })
 
 DEF_CMD(GET_LOCAL, 1, {
-    PUSH(0);
+    PUSH(stack[LOCALS_BEGIN() + (size_t)args[0]]);
 })
 
 DEF_CMD(SET_LOCAL, 1, {
-    POP();
+    stack[LOCALS_BEGIN() + (size_t)args[0]] = POP();
+})
+
+DEF_CMD(GET_ARG, 1, {
+    PUSH(stack[LOCALS_BEGIN() - 1 - (int)args[0]]);
 })
 
 DEF_CMD(PASS, 0, {})
@@ -262,25 +270,25 @@ DEF_CMD(NE, 0, {
 DEF_CMD(LT, 0, {
     let a = POP();
     let b = POP();
-    PUSH((double)LESS(a, b));
+    PUSH((double)LESS(b, a));
 })
 
 DEF_CMD(LE, 0, {
     let a = POP();
     let b = POP();
-    PUSH((double)!GRT(a, b));
+    PUSH((double)!GRT(b, a));
 })
 
 DEF_CMD(GT, 0, {
     let a = POP();
     let b = POP();
-    PUSH((double)GRT(a, b));
+    PUSH((double)GRT(b, a));
 })
 
 DEF_CMD(GE, 0, {
     let a = POP();
     let b = POP();
-    PUSH((double)!LESS(a, b));
+    PUSH((double)!LESS(b, a));
 })
 
 #undef PUSH

@@ -10,6 +10,12 @@
 #include <string>
 
 
+struct Function {
+    uintptr_t start, endfunc;
+    size_t nargs, nlocals;
+};
+
+
 void get_labels(FILE* file, auto& labels) {
     labels.clear();
 
@@ -63,19 +69,36 @@ void get_funcs(FILE* file, auto& funcs) {
             ++ch;
         *ch = 0;
         
-        if (!strcmp(buf, "FUNC")) {
-            buf = ch + 1;
+        if (!strcmp(buf, "FD")) {
+            buf = ++ch;
             shift(buf);
-            
+
+            ch = buf;
+            while (*ch && *ch != ' ')
+                ++ch;
+            *ch = 0;
+            ++ch;
+            shift(ch);
+
             if (!balance)
                 throw asm_exception(line, "function definition inside another function is permitted");
             if (!*buf)
                 throw asm_exception(line, "function's name not found");
-            if (funcs[buf].first)
+            if (funcs[buf].start)
                 throw asm_exception(line, get_string("function \"%s\" redefinition", buf));
 
-            ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[CMD_FUNC];
-            funcs[buf].first = ip_shift;
+            char* end = nullptr;
+            double nargs = strtod(ch, &end);
+            ch = end;
+            shift(ch);
+            double nlocals = strtod(ch, &end);
+
+            funcs[buf].nargs = nargs;
+            funcs[buf].nlocals = nlocals;
+
+            ip_shift += sizeof(unsigned char) + sizeof(double) * (ARGS_NUMBERS[CMD_FD] - 1);
+            funcs[buf].start = ip_shift;
+            ip_shift += sizeof(double);
             cur_func_name = buf;
             balance = false;
         }
@@ -84,7 +107,7 @@ void get_funcs(FILE* file, auto& funcs) {
                 throw asm_exception(line, "no function to terminate here");
 
             ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[CMD_ENDFUNC];
-            funcs[cur_func_name].second = ip_shift;
+            funcs[cur_func_name].endfunc = ip_shift;
             balance = true;
         }
         else
@@ -121,7 +144,8 @@ int main(int argc, char** argv) {
             PANIC();
 
         std::map<std::string, uintptr_t> labels;
-        std::map<std::string, std::pair<uintptr_t, uintptr_t>> funcs;
+        std::map<std::string, Function> funcs;
+
 
         try {
             get_labels(raw, labels);

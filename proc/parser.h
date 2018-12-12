@@ -122,12 +122,18 @@ static void parse_jump(char* args_buf, FILE* out, size_t line, auto& labels) {
 }
 
 
-static void parse_func(char* args_buf, FILE* out, auto& funcs) noexcept {
+static void parse_fd(char* args_buf, FILE* out, auto& funcs) noexcept {
     char* st = args_buf;
     shift(st);
 
-    double tmp = funcs[st].second - 1 + strlen(SGN);
+    char* ch = st + 1;
+    while (*ch && *ch != ' ')
+        ++ch;
+    *ch = 0;
+    
+    double tmp = funcs[st].endfunc - 1 + strlen(SGN);
     fwrite(&tmp, sizeof(double), 1, out);
+    fwrite(&funcs[st].nlocals, sizeof(double), 1, out);
 }
 
 
@@ -135,10 +141,10 @@ static void parse_call(char* args_buf, FILE* out, size_t line, auto& funcs) {
     char* st = args_buf;
     shift(st);
 
-    if (!funcs[st].first)
+    if (!funcs[st].start)
         throw asm_exception(line, get_string("function %s not found", st));
 
-    double tmp = funcs[st].first - 1 + strlen(SGN);
+    double tmp = funcs[st].start - 1 + strlen(SGN);
     fwrite(&tmp, sizeof(double), 1, out);
 }
 
@@ -152,8 +158,8 @@ static void parse(unsigned char command, char* args_buf, FILE* out, size_t line,
              command == CMD_JA || command == CMD_JB || command == CMD_JNE ||
              command == CMD_JAE || command == CMD_JBE || command == CMD_JE)
         parse_jump(args_buf, out, line, labels);
-    else if (command == CMD_FUNC)
-        parse_func(args_buf, out, funcs);
+    else if (command == CMD_FD)
+        parse_fd(args_buf, out, funcs);
     else if (command == CMD_CALL)
         parse_call(args_buf, out, line, funcs);
     else {

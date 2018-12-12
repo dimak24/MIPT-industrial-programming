@@ -1,18 +1,18 @@
 :kek
-FUNC sqr
+FD sqr 1 0
 POP rax
 PUSH rax
 PUSH rax
 PUSH rax
 MUL
 ENDFUNC
-FUNC print_all_squares
+FD print_all_squares 1 0
 :again
 POP rax
 PUSH 0
 PUSH rax
 CALL sqr
-OUT_INT
+OUT
 PUSH 1
 SUB
 JBE :again
