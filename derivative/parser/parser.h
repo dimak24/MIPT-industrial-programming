@@ -46,7 +46,7 @@ public:
     Instruction:               I >> OP|IF|W|F|VD
     Grammar:                   G >> {I;}+\0
 
-    Math function declaration: F >> ID(ID)[=]E'
+    Math function declaration: F >> ID(ID)[:=]E'
 //////////////////////
 
     Array:                     A >> \[{CE|{CE,}*CE}\]
@@ -56,6 +56,7 @@ public:
 class Parser {
 private:
     Lexer lexer_;
+    std::map<std::string, Node*> funcs;
 
     Node getG_() {
         auto p0 = lexer_.mark();
@@ -68,6 +69,10 @@ private:
 
         while (lexeme.type != LT_EOF && lexeme.type != LT_END) {
             node.adopt(getI_());
+            if (IS_OP(*node.children.back()) &&
+                OP(*node.children.back()) == OP_DECLARE &&
+                IS_UNDEFINED(*node.children.back()->children[1]))
+                    funcs[std::string(NAME(*node.children.back()->children[0]))] = node.children.back();
 
             p0 = lexer_.mark();
             lexeme = lexer_.next_lexeme();
@@ -76,12 +81,12 @@ private:
         return node;
     }
 
-    Node getC_() {                                                                                      // TODO
+    Node getC_() {
         auto p0 = lexer_.mark();
         auto lexeme = lexer_.next_lexeme();
         Node node;
 
-        auto argnum = -2;
+        auto argnum = -1;
 
         if (false);
 #define DEF_MATH_OP(name, _type, mnemonic, latex_command, arg_num, proc_command) \
@@ -94,7 +99,21 @@ private:
         else {
             lexer_.reset(p0);
             node = Node({NODE_CALL, NAME(getID_())});
+
+            auto name = std::string(NAME(node));
+
+            if (false);
+#define DEF_BUILTIN_FUNC(bf_name, arg_num, proc_command) \
+            else if (!strcmp(name.c_str(), bf_name)) \
+                argnum = arg_num;
+#include "operators.h"
+#undef DEF_BUILTIN_FUNC
+            else if (!funcs.count(name))
+                throw parser_exception("function not declared");
+            else
+                argnum = funcs[name]->children[1]->children.size();
         }
+
         if (lexer_.next_lexeme().type != LT_L_PARANTHESIS) {
             lexer_.reset(p0);
             throw parser_exception("expected (");
@@ -102,8 +121,8 @@ private:
         
         p0 = lexer_.mark();
         if (lexer_.next_lexeme().type == LT_R_PARANTHESIS) {
-            // if (argnum)
-            //     throw parser_exception("expected more, than 0 arguments");
+            if (argnum)
+                throw parser_exception("expected more, than 0 arguments");
             return node;
         }
 
@@ -114,7 +133,7 @@ private:
         while (true) {
             p0 = lexer_.mark();
             if (lexer_.next_lexeme().type == LT_R_PARANTHESIS) {
-                if (argnum != -2 && argnum != args)
+                if (argnum != args)
                     throw parser_exception("wrong number of arguments");
                 return node;
             }
@@ -192,33 +211,56 @@ private:
 
     Node getF_() {
         auto name = getID_();
+        auto name_str = std::string(NAME(name));
+
+        if (funcs.count(name_str))
+            throw parser_exception("function redeclaration");
 
         if (lexer_.next_lexeme().type != LT_L_PARANTHESIS)
             throw parser_exception("( expected");
-        auto var = getID_();
 
-        if (lexer_.next_lexeme().type != LT_R_PARANTHESIS)
-            throw parser_exception(") expected");
+        std::vector<Node> args;
+
+        auto p0 = lexer_.mark();
+        while (lexer_.next_lexeme().type != LT_R_PARANTHESIS) {
+            lexer_.reset(p0);
+            args.push_back(getID_());
+
+            p0 = lexer_.mark();
+            if (lexer_.next_lexeme().type != LT_COMMA)
+                lexer_.reset(p0);
+            p0 = lexer_.mark();
+        }
 
         if (lexer_.next_lexeme().type != LT_DECLARE)
-            throw parser_exception("= expected");
+            throw parser_exception(":= expected");
 
         auto expr = getCE_();
 
-        if (lexer_.next_lexeme().type != LT_DERIVATIVE)
-            throw parser_exception("\' expected");
+        // HARD MODE
+        // if (lexer_.next_lexeme().type != LT_DERIVATIVE)
+        //     throw parser_exception("\' expected");
 
-        Node ans = derivative(expr, NAME(var));
-
-        auto p0 = lexer_.mark();
+        Node ans = expr;
+        p0 = lexer_.mark();
+        
         while (lexer_.next_lexeme().type == LT_DERIVATIVE) {
-            dump(&ans);
-            ans = derivative(Node(ans), NAME(var));
+            p0 = lexer_.mark();
+            if (lexer_.next_lexeme().type == LT_L_BRACE) {
+                auto var = getID_();
+                if (lexer_.next_lexeme().type != LT_R_BRACE)
+                    throw parser_exception("} expected");
+                ans = derivative(Node(ans), NAME(var));
+            }
+            else {
+                lexer_.reset(p0);
+                ans = derivative(Node(ans));
+            }
             p0 = lexer_.mark();
         }
         lexer_.reset(p0);
 
-        return MAKE_OP<OP_DECLARE>(name, Node({NODE_UNDEFINED}, new Node(var)), ans);
+        return MAKE_OP<OP_DECLARE>(name, Node({NODE_UNDEFINED}, args), ans);
     }
 
     Node getCE_() {
@@ -260,7 +302,7 @@ private:
         auto p0 = lexer_.mark();
         auto lexeme = lexer_.next_lexeme();
 
-        while (lexeme.type == LT_PLUS || lexeme.type == LT_MINUS) {
+        while (lexeme.type == LT_PLUS || lexeme.type == LT_MINUS || lexeme.type == LT_PM) {
             auto node1 = getS_();
             if (lexeme.type == LT_PLUS)
                 node += node1;
@@ -281,7 +323,7 @@ private:
         auto p0 = lexer_.mark();
         auto lexeme = lexer_.next_lexeme();
 
-        while (lexeme.type == LT_MUL || lexeme.type == LT_DIV) {
+        while (lexeme.type == LT_MUL || lexeme.type == LT_DIV || lexeme.type == LT_MD) {
             auto node1 = getM_();
             if (lexeme.type == LT_MUL)
                 node *= node1;
@@ -448,20 +490,20 @@ void generate_asm_EXPR(Node* expr, FILE* memstream) {
             case OP_##name: { \
                 for (auto i = 0; i < arg_num; ++i) \
                     if (IS_VAR(*expr->children[i])) { \
-                        fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, memstream); \
-                        fwrite(new double(locals.back()[std::string(NAME(*expr->children[i]))]), \
+                        fwrite(get_address(CMD_GET_LOCAL), 1, 1, memstream); \
+                        fwrite(get_address<double>(locals.back()[std::string(NAME(*expr->children[i]))]), \
                                sizeof(double), 1, memstream); \
                     } \
                     else if (IS_CONST(*expr->children[i])) { \
-                        fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream); \
-                        fwrite(new double(0), sizeof(double), 1, memstream); \
+                        fwrite(get_address(CMD_PUSH), 1, 1, memstream); \
+                        fwrite(get_address<double>(0), sizeof(double), 1, memstream); \
                         fwrite(&VALUE(*expr->children[i]), sizeof(double), 1, memstream); \
                     } \
                     else if (IS_CALL(*expr->children[i])) \
                         generate_asm_CALL(expr->children[i], memstream); \
                     else \
                         generate_asm_EXPR(expr->children[i], memstream); \
-                fwrite(new unsigned char(CMD_##proc_command), 1, 1, memstream); \
+                fwrite(get_address(CMD_##proc_command), 1, 1, memstream); \
                 break; \
             }
 #include "operators.h"
@@ -471,8 +513,8 @@ void generate_asm_EXPR(Node* expr, FILE* memstream) {
     else if (IS_CALL(*expr))
         generate_asm_CALL(expr, memstream);
     else if (IS_CONST(*expr)) {
-        fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream);
-        fwrite(new double(0), sizeof(double), 1, memstream);
+        fwrite(get_address(CMD_PUSH), 1, 1, memstream);
+        fwrite(get_address<double>(0), sizeof(double), 1, memstream);
         fwrite(&VALUE(*expr), sizeof(double), 1, memstream);
     }
     else
@@ -488,15 +530,15 @@ void generate_asm_OP(Node* op, FILE* memstream) {
                 if (!locals.back().count(name1)) \
                     throw parser_exception("variable has not been declared yet"); \
                 \
-                fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, memstream); \
-                fwrite(new double(locals.back()[name1]), sizeof(double), 1, memstream); \
+                fwrite(get_address(CMD_GET_LOCAL), 1, 1, memstream); \
+                fwrite(get_address<double>(locals.back()[name1]), sizeof(double), 1, memstream); \
                 \
                 generate_asm_EXPR(op->children[1], memstream); \
                 \
-                fwrite(new unsigned char(CMD_##proc_command), 1, 1, memstream); \
+                fwrite(get_address(CMD_##proc_command), 1, 1, memstream); \
                 \
-                fwrite(new unsigned char(CMD_SET_LOCAL), 1, 1, memstream); \
-                fwrite(new double(locals.back()[name1]), sizeof(double), 1, memstream); \
+                fwrite(get_address(CMD_SET_LOCAL), 1, 1, memstream); \
+                fwrite(get_address<double>(locals.back()[name1]), sizeof(double), 1, memstream); \
                 break; \
             }
 #include "operators.h"
@@ -506,20 +548,20 @@ void generate_asm_OP(Node* op, FILE* memstream) {
                 auto cond = op->children[0];
                 generate_asm_EXPR(cond, memstream);
 
-                fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream);
-                fwrite(new double(0), sizeof(double), 1, memstream);
-                fwrite(new double(0), sizeof(double), 1, memstream);
-                fwrite(new unsigned char(CMD_JE), 1, 1, memstream);
+                fwrite(get_address(CMD_PUSH), 1, 1, memstream);
+                fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+                fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+                fwrite(get_address(CMD_JE), 1, 1, memstream);
             
                 auto label_place = ftell(memstream);
-                fwrite(new double(0), sizeof(double), 1, memstream);
+                fwrite(get_address<double>(0), sizeof(double), 1, memstream);
                 
                 generate_block(op->children[1], memstream);
 
                 auto last = ftell(memstream);
 
                 fseek(memstream, label_place, SEEK_SET);
-                fwrite(new double(last + strlen(SGN)), sizeof(double), 1, memstream);
+                fwrite(get_address<double>(last + strlen(SGN)), sizeof(double), 1, memstream);
 
                 fseek(memstream, last, SEEK_SET);
                 break;
@@ -530,8 +572,8 @@ void generate_asm_OP(Node* op, FILE* memstream) {
 
                 generate_block(op->children[0], memstream);
 
-                fwrite(new unsigned char(CMD_JMP), 1, 1, memstream);
-                fwrite(new double(start + strlen(SGN)), sizeof(double), 1, memstream);
+                fwrite(get_address(CMD_JMP), 1, 1, memstream);
+                fwrite(get_address<double>(start + strlen(SGN)), sizeof(double), 1, memstream);
                 break;
             }
 
@@ -546,13 +588,13 @@ void generate_asm_CALL(Node* call, FILE* memstream) {
     for (auto it_child = call->children.rbegin(); it_child != call->children.rend(); ++it_child) {
         auto child = *it_child;
         if (IS_VAR(*child)) {
-            fwrite(new unsigned char(CMD_GET_LOCAL), 1, 1, memstream);
-            fwrite(new double(locals.back()[std::string(NAME(*child))]), sizeof(double), 1, memstream);
+            fwrite(get_address(CMD_GET_LOCAL), 1, 1, memstream);
+            fwrite(get_address<double>(locals.back()[std::string(NAME(*child))]), sizeof(double), 1, memstream);
         }
         else if (IS_CONST(*child)) {
-            fwrite(new unsigned char(CMD_PUSH), 1, 1, memstream);
-            fwrite(new double(0), sizeof(double), 1, memstream);
-            fwrite(new double(VALUE(*child)), sizeof(double), 1, memstream);
+            fwrite(get_address(CMD_PUSH), 1, 1, memstream);
+            fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+            fwrite(get_address<double>(VALUE(*child)), sizeof(double), 1, memstream);
         }
         else if (IS_CALL(*child))
             generate_asm_CALL(child, memstream);
@@ -563,14 +605,14 @@ void generate_asm_CALL(Node* call, FILE* memstream) {
     if (false);
 #define DEF_BUILTIN_FUNC(mnemonic, nargs, proc_command) \
     else if (name == mnemonic) \
-        fwrite(new unsigned char(CMD_##proc_command), 1, 1, memstream);
+        fwrite(get_address(CMD_##proc_command), 1, 1, memstream);
 #include "operators.h"
 #undef DEF_BUILTIN_FUNC
     else if (!locals.back().count(name))
         throw parser_exception("function has not been declared yet");
     else {
-        fwrite(new unsigned char(CMD_CALL), 1, 1, memstream);
-        fwrite(new double(call_start[name]), sizeof(double), 1, memstream);
+        fwrite(get_address(CMD_CALL), 1, 1, memstream);
+        fwrite(get_address<double>(call_start[name]), sizeof(double), 1, memstream);
     }
 }
 
@@ -581,27 +623,30 @@ void generate_asm_FD(Node* fd, FILE* memstream) {
         throw parser_exception("function has already been declared");
     locals.back()[name] = locals.back().size();
 
-    fwrite(new unsigned char(CMD_FD), 1, 1, memstream);
-    auto locals_offset = ftell(memstream);
+    fwrite(get_address(CMD_FD), 1, 1, memstream);
+    auto nskip_offset = ftell(memstream);
 
-    fwrite(new double(fd->children[1]->children.size()), sizeof(double), 1, memstream);
-    call_start[name] = ftell(memstream) + strlen(SGN);                                               // TODO
-    fwrite(new double(0), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+    call_start[name] = ftell(memstream) + strlen(SGN);
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
 
     locals.emplace_back();
     
     auto n = fd->children[1]->children.size();
-    for (auto i = 0; i < n; ++i)
-        locals.back()[NAME(*fd->children[1]->children[i])] = i - n;
+    for (auto i = 0u; i < n; ++i)
+        locals.back()[NAME(*fd->children[1]->children[i])] = -i-1;
     
     generate_asm_EXPR(fd->children[2], memstream);
-    fwrite(new unsigned char(CMD_ENDFUNC), 1, 1, memstream);
+    fwrite(get_address(CMD_RET), 1, 1, memstream);
+    fwrite(get_address<double>(call_start[name]), sizeof(double), 1, memstream);
 
     auto from = ftell(memstream);
 
-    fseek(memstream, locals_offset, SEEK_SET);
-    fwrite(new double(from + strlen(SGN)), sizeof(double), 1, memstream);
-    fwrite(new double(locals.back().size() - n), sizeof(double), 1, memstream);
+    fseek(memstream, nskip_offset, SEEK_SET);
+    fwrite(get_address<double>(from + strlen(SGN)), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(n), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(locals.back().size() - n), sizeof(double), 1, memstream);
     fseek(memstream, from, SEEK_SET);
 
     locals.pop_back();  
@@ -616,8 +661,8 @@ void generate_asm_VD(Node* vd, FILE* memstream) {
 
     generate_asm_EXPR(vd->children[1], memstream);
     
-    fwrite(new unsigned char(CMD_SET_LOCAL), 1, 1, memstream);
-    fwrite(new double(locals.back()[name]), sizeof(double), 1, memstream);
+    fwrite(get_address(CMD_SET_LOCAL), 1, 1, memstream);
+    fwrite(get_address<double>(locals.back()[name]), sizeof(double), 1, memstream);
 }
 
 
@@ -657,31 +702,35 @@ void generate_asm(Node* root) {
     locals.emplace_back();
 
     // fd
-    fwrite(new unsigned char(CMD_FD), 1, 1, memstream);
+    fwrite(get_address(CMD_FD), 1, 1, memstream);
     auto offset = ftell(memstream);
 
     // endfunc
-    fwrite(new double(0), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+    // nargs
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
     // nlocals
-    fwrite(new double(0), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
 
     generate_block(root, memstream);
-    fwrite(new unsigned char(CMD_ENDFUNC), 1, 1, memstream);
+    fwrite(get_address(CMD_LEAVE), 1, 1, memstream);
+    fwrite(get_address<double>(strlen(SGN) + 1 + sizeof(double)), sizeof(double), 1, memstream);
 
     auto from = ftell(memstream);
 
     // update
     fseek(memstream, offset, SEEK_SET);
-    fwrite(new double(from - begin + strlen(SGN)), sizeof(double), 1, memstream);
-    fwrite(new double(locals.back().size()), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(from - begin + strlen(SGN)), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(locals.back().size()), sizeof(double), 1, memstream);
 
     fseek(memstream, from, SEEK_SET);
 
-    fwrite(new unsigned char(CMD_CALL), 1, 1, memstream);
-    fwrite(new double(strlen(SGN) + 1 + sizeof(double)), sizeof(double), 1, memstream);
+    fwrite(get_address(CMD_CALL), 1, 1, memstream);
+    fwrite(get_address<double>(strlen(SGN) + 1 + sizeof(double)), sizeof(double), 1, memstream);
 
     fclose(memstream);
-
+ 
     fwrite(buf, nbuf, 1, out);
 
     fclose(out);

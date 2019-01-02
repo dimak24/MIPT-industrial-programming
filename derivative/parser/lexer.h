@@ -24,6 +24,8 @@ enum LexemeType {
     LT_L_PARANTHESIS,
     LT_L_BRACKET,
     LT_R_BRACKET,
+    LT_L_BRACE,
+    LT_R_BRACE,
 
 #define DEF_OP(name, mnemonic) LT_##name,
 #define DEF_MATH_OP(name, type, mnemonic, latex_command, arg_num, proc_command) DEF_OP(name, mnemonic)
@@ -96,7 +98,7 @@ public:
     }
 
     Lexeme next_lexeme() {
-        while (p_ != end_ && *p_ == ' ')
+        while (p_ != end_ && isspace(*p_))
             ++p_;
 
         if (p_ == end_)
@@ -113,9 +115,17 @@ public:
                 ++p_;
                 return {LT_R_PARANTHESIS};
             case '[':
+                ++p_;
                 return {LT_L_BRACKET};
             case ']':
+                ++p_;
                 return {LT_R_BRACKET};
+            case '{':
+                ++p_;
+                return {LT_L_BRACE};
+            case '}':
+                ++p_;
+                return {LT_R_BRACE};
             case '\'':
                 ++p_;
                 return {LT_DERIVATIVE};
@@ -144,6 +154,7 @@ public:
             default: {
                 int ans = 0, len = 0;
                 std::tie(ans, len) = trie.find_longest_prefix(p_, end_);
+                // printf("%d\n", ans == LT_PM);
                 if (ans != __LT_UNDEFINED__) {
                     p_ += len;
                     return {(LexemeType)ans};

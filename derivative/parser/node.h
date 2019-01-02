@@ -6,6 +6,7 @@
 #include <string.h>
 #include <variant>
 #include <vector>
+#include <map>
 
 #include "auxiliary.h"
 
@@ -90,6 +91,14 @@ struct Node {
                 child->parent = this;
         }
 
+    Node(NodeData data, const std::vector<Node>& args)
+        : data(data), parent(nullptr) {
+            for (auto it = args.begin(); it != args.end(); ++it) {
+                children.push_back(new Node(*it));
+                children.back()->parent = this;
+            }
+        }
+
     Node(const Node& another)
         : data(another.data), parent(nullptr) {
             for (const auto& child : another.children)
@@ -134,6 +143,15 @@ struct Node {
 #define IS_CONST(node) ((node).data.type == NODE_CONST)
 #define IS_UNDEFINED(node) ((node).data.type == NODE_UNDEFINED)
 #define IS_CALL(node) ((node).data.type == NODE_CALL)
+
+
+#define OP(node) (std::get<Operator>((node).data.value))
+#define VALUE(node) (std::get<double>((node).data.value))
+#define NAME(node) (std::get<const char*>((node).data.value))
+#define EPS 1e-5
+#define EQUAL(value1, value2) (fabs((value1) - (value2)) < EPS)
+
+
 #define MAKE_CONST(value) Node({NODE_CONST, (value)})
 #define MAKE_VAR(name) Node({NODE_VAR, name})
 
@@ -142,17 +160,28 @@ auto MAKE_OP(Args... args) {
     return Node({NODE_OP, op}, new Node(args)...);
 }
 
+template <Operator op>
+auto MAKE_OP(const std::vector<Node>& args) {
+    return Node({NODE_OP, op}, args);
+}
+
 template <typename... Args>
 auto MAKE_CALL(const char* name, const Node& func, Args... args) {
     return Node({NODE_CALL, name}, new Node({NODE_UNDEFINED}, new Node(args)...), new Node(func));
 }
 
-#define OP(node) (std::get<Operator>((node).data.value))
-#define VALUE(node) (std::get<double>((node).data.value))
-#define NAME(node) (std::get<const char*>((node).data.value))
-#define EPS 1e-5
-#define EQUAL(value1, value2) (fabs((value1) - (value2)) < EPS)
+// call
+Node reduce(const Node& func, std::map<std::string, Node>& args) {
+    if (IS_CONST(func))
+        return func;
+    if (IS_VAR(func))
+        return Node(args[std::string(NAME(func))]);
 
+    std::vector<Node> new_children;
+    for (auto child : func.children)
+        new_children.push_back(reduce(*child, args));
+    return Node({NODE_OP, OP(func)}, new_children);
+}
 
 
 Node operator+(const Node& left, const Node& right) {

@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
             lines_begin[cur - prog] = ++line;
             unsigned char index = *(unsigned char*)cur;
             
-            if (index == CMD_ENDFUNC)
+            if (index == CMD_RET || index == CMD_LEAVE)
                 --indent;
             
             fprintf(raw, "%*s%s", indent * 2, "", COMMANDS_NAMES[index]);

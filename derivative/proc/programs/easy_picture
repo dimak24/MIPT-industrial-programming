@@ -9,5 +9,11 @@ PUSH 256
 MOD
 POP [rax]
 INC
+POP rbx
+POP rcx
+PUSH rcx
+PUSH rbx
+PUSH rcx
+PUSH rbx
 JNE :kek
 DRAW 400 200 240000

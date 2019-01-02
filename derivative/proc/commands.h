@@ -7,6 +7,7 @@
 #define POP_MEM(index) RAM[index] = POP()
 #define PUSH_CALL(current_ip) call_stack.push(current_ip)
 #define PUSH_LOCALS_BEGIN(index) locals_begin.push(index)
+#define POP_LOCALS_BEGIN() locals_begin.pop()
 #define LOCALS_BEGIN() locals_begin.top()
 #define POP_CALL() call_stack.pop()
 #define let double
@@ -213,26 +214,43 @@ DEF_CMD(CALL, 1, {
     PUSH_CALL(ip);
     ip = (int)args[0];
     PUSH_LOCALS_BEGIN(stack.size());
-    let a = *(double*)(prog + ip);
-    for (size_t i = 0; i < a; ++i)
+
+    // nargs
+    ip += sizeof(double);
+    
+    let nlocals = *(double*)(prog + ip);
+    for (size_t i = 0; i < nlocals; ++i)
         PUSH(0);
     ip += sizeof(double);
 })
 
-DEF_CMD(ENDFUNC, 0, {
+DEF_CMD(LEAVE, 1, {
     ip = POP_CALL();
-})
+    POP_LOCALS_BEGIN();
 
-DEF_CMD(LEAVE, 0, {
-    ip = POP_CALL();
+    let nargs = *(double*)(prog + (int)args[0]);
+    let nlocals = *((double*)(prog + (int)args[0]) + 1);
+
+    for (size_t i = 0; i < nargs + nlocals; ++i)
+        POP();
 })
 
 DEF_CMD(RET, 1, {
     ip = POP_CALL();
-    PUSH(args[0]);
+    POP_LOCALS_BEGIN();
+
+    let nargs = *(double*)(prog + (int)args[0]);
+    let nlocals = *((double*)(prog + (int)args[0]) + 1);
+
+    let tmp = POP();
+
+    for (size_t i = 0; i < nargs + nlocals; ++i)
+        POP();
+
+    PUSH(tmp);
 })
 
-DEF_CMD(FD, 2, {
+DEF_CMD(FD, 3, {
     ip = (int)args[0];
 })
 

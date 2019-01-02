@@ -15,6 +15,8 @@ DEF_MATH_OP(SQRT, FUNC, "sqrt", "\\sqrt", 1, SQRT)
 DEF_MATH_OP(SQR, FUNC, "sqrt", "\\sqrt", 1, SQR)
 DEF_MATH_OP(SIN, FUNC, "sin", "\\sin", 1, SIN)
 DEF_MATH_OP(COS, FUNC, "cos", "\\cos", 1, COS)
+DEF_MATH_OP(PM, BINARY, "+-", "\\pm", 2, POP)
+DEF_MATH_OP(MD, BINARY, "*/", "?", 2, POP)
 #endif
 
 #ifdef DEF_BUILTIN_FUNC

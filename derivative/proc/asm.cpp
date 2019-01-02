@@ -56,7 +56,6 @@ void get_funcs(FILE* file, auto& funcs) {
     size_t nbuf = 0;
     int ip_shift = 1;
     std::string cur_func_name("");
-    bool balance = true;
     size_t line = 0;
 
     while (getline(&buf, &nbuf, file) > 0) {
@@ -80,8 +79,6 @@ void get_funcs(FILE* file, auto& funcs) {
             ++ch;
             shift(ch);
 
-            if (!balance)
-                throw asm_exception(line, "function definition inside another function is permitted");
             if (!*buf)
                 throw asm_exception(line, "function's name not found");
             if (funcs[buf].start)
@@ -96,19 +93,14 @@ void get_funcs(FILE* file, auto& funcs) {
             funcs[buf].nargs = nargs;
             funcs[buf].nlocals = nlocals;
 
-            ip_shift += sizeof(unsigned char) + sizeof(double) * (ARGS_NUMBERS[CMD_FD] - 1);
+            ip_shift += sizeof(unsigned char) + sizeof(double) * (ARGS_NUMBERS[CMD_FD] - 2);
             funcs[buf].start = ip_shift;
-            ip_shift += sizeof(double);
+            ip_shift += sizeof(double) * 2;
             cur_func_name = buf;
-            balance = false;
         }
-        else if (!strcmp(buf, "ENDFUNC")) {
-            if (balance)
-                throw asm_exception(line, "no function to terminate here");
-
-            ip_shift += sizeof(unsigned char) + sizeof(double) * ARGS_NUMBERS[CMD_ENDFUNC];
+        else if (!strcmp(buf, "RET") || !strcmp(buf, "LEAVE")) {
+            ip_shift += sizeof(unsigned char) + sizeof(double);
             funcs[cur_func_name].endfunc = ip_shift;
-            balance = true;
         }
         else
             for (unsigned char i = 0; i < COMMANDS_NAMES.size(); ++i)
@@ -117,9 +109,6 @@ void get_funcs(FILE* file, auto& funcs) {
                     break;
                 }
     }
-
-    if (!balance)
-        throw asm_exception(++line, "some functions are not terminated");
 }
 
 

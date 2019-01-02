@@ -121,6 +121,7 @@ static void parse_jump(char* args_buf, FILE* out, size_t line, auto& labels) {
     fwrite(&tmp, sizeof(double), 1, out);
 }
 
+static std::string __name = "";
 
 static void parse_fd(char* args_buf, FILE* out, auto& funcs) noexcept {
     char* st = args_buf;
@@ -130,10 +131,18 @@ static void parse_fd(char* args_buf, FILE* out, auto& funcs) noexcept {
     while (*ch && *ch != ' ')
         ++ch;
     *ch = 0;
+    __name = st;
     
     double tmp = funcs[st].endfunc - 1 + strlen(SGN);
     fwrite(&tmp, sizeof(double), 1, out);
+    fwrite(&funcs[st].nargs, sizeof(double), 1, out);
     fwrite(&funcs[st].nlocals, sizeof(double), 1, out);
+}
+
+
+static void parse_endfunc(FILE* out, auto& funcs) {
+    double tmp = funcs[__name].start - 1 + strlen(SGN);
+    fwrite(&tmp, sizeof(double), 1, out);
 }
 
 
@@ -162,6 +171,8 @@ static void parse(unsigned char command, char* args_buf, FILE* out, size_t line,
         parse_fd(args_buf, out, funcs);
     else if (command == CMD_CALL)
         parse_call(args_buf, out, line, funcs);
+    else if (command == CMD_RET || command == CMD_LEAVE)
+        parse_endfunc(out, funcs);
     else {
         char* cur = args_buf;
 
