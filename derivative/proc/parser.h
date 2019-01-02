@@ -6,6 +6,14 @@
 #include "processor.h"
 
 
+template <typename T>
+static void* get_address(T new_value) {
+static T value;
+    
+    value = new_value;
+    return (void*)&value;
+}
+
 
 static inline void shift(char*& ch) {
     while (*ch == ' ')
@@ -33,15 +41,15 @@ static void parse_push_pop(size_t command, char* args_buf, FILE* out, size_t lin
 
     if (!*st) 
         if (command == CMD_POP) {
-            fwrite(new double(0.0), sizeof(double), 1, out);
-            fwrite(new double(0.0), sizeof(double), 1, out);
+            fwrite(get_address<double>(0.0), sizeof(double), 1, out);
+            fwrite(get_address<double>(0.0), sizeof(double), 1, out);
         }
         else
             throw asm_exception(line, "PUSH: no arguments (need 1)");
     else if (*st == 'r') {
         for (double k = 0; k < REGISTERS_NAMES.size(); ++k)
             if (!strcmp(st, REGISTERS_NAMES[k])) {
-                fwrite(new double(1.0), sizeof(double), 1, out);
+                fwrite(get_address<double>(1.0), sizeof(double), 1, out);
                 fwrite(&k, sizeof(double), 1, out);
                 break;
             }
@@ -67,7 +75,7 @@ static void parse_push_pop(size_t command, char* args_buf, FILE* out, size_t lin
 
             if (*st == ']') {
                 double double_index = index;
-                fwrite(new double(2.0), sizeof(double), 1, out);
+                fwrite(get_address<double>(2.0), sizeof(double), 1, out);
                 fwrite(&double_index, sizeof(double), 1, out);
                 return;
             }
@@ -87,7 +95,7 @@ static void parse_push_pop(size_t command, char* args_buf, FILE* out, size_t lin
         index += arg * (__REGISTERS_NUMBER__ + 1);
         
         double double_index = index;
-        fwrite(new double(2.0), sizeof(double), 1, out);
+        fwrite(get_address<double>(2.0), sizeof(double), 1, out);
         fwrite(&double_index, sizeof(double), 1, out);
     }
     else if (command == CMD_PUSH) {
@@ -97,7 +105,7 @@ static void parse_push_pop(size_t command, char* args_buf, FILE* out, size_t lin
         if (*end)
             throw asm_exception(line, "wrong argument (expected double)");
 
-        fwrite(new double(0.0), sizeof(double), 1, out);
+        fwrite(get_address<double>(0.0), sizeof(double), 1, out);
         fwrite(&arg, sizeof(double), 1, out);
     }
     else

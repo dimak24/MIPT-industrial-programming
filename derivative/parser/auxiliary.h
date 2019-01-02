@@ -15,12 +15,3 @@ static std::string eat_extra_zeros(const std::string& expression) {
         --end;
     return expression.substr(0, end + 1);
 }
-
-
-template <typename T>
-static void* get_address(T new_value) {
-static T value;
-    
-    value = new_value;
-    return (void*)&value;
-}

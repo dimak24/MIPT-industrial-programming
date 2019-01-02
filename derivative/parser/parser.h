@@ -9,6 +9,7 @@
 #include "lexer.h"
 #include "node.h"
 #include "../proc/processor.h"
+#include "../proc/parser.h"
 
 
 class parser_exception : std::exception {
