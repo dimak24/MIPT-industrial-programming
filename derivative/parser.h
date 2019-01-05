@@ -26,31 +26,32 @@ public:
 };
 
 /*
-    Number:                    N >> [0-9]+
-    Identificator:             ID >> [a-z,A-Z]+
-    Value:                     VAL >> N|ID
+    Number:                        N >> [0-9]+
+    Identificator:                 ID >> [a-z,A-Z]+
+    Value:                         VAL >> N|ID|ID\[_|N{,N}*\]
 
-    CMPExpression:             CE >> E{[><]E}*
-    Expression:                E >> S{[+-]S}*
-    Summand:                   S >> M{[/ *]M}*
-    Multiplier:                M >> P|P^P
-    Paranthesis:               P >> (CE)|VAL|C
+    CMPExpression:                 CE >> E{[><]E}*
+    Expression:                    E >> S{[+-]S}*
+    Summand:                       S >> M{[/ *]M}*
+    Multiplier:                    M >> P|P^P
+    Paranthesis:                   P >> (CE)|VAL|C
 
-    Variable declaration:      VD >> ID:=CE
+    Variable declaration:          VD >> ID:=CE
+    Math function declaration:     F >> ID(_|ID{,ID}*):=E'
+
+    Ordinary function declaration: DEF >> def ID(_|ID{,ID}*) as G end;
+    Return:                        ret CE | leave 
     
-    Operation:                 OP >> ID [BINARY OP] CE | C
-    Call:                      C >> {ID|[*+]}({CE,}*CE)
+    Operation:                     OP >> ID [+ - / * = +=] CE | C
+    Call:                          C >> ID(_|{CE,}*CE)
 
-    If:                        IF >> if CE then G end;
-    While:                     W >> till the cows come home repeat G end;
+    If:                            IF >> if CE then G end;
+    While:                         W >> till the cows come home repeat G end;
 
-    Instruction:               I >> OP|IF|W|F|VD
-    Grammar:                   G >> {I;}+\0
+    Instruction:                   I >> OP|IF|W|F|VD
+    Grammar:                       G >> {I;}+\0
 
-    Math function declaration: F >> ID(ID)[:=]E'
-//////////////////////
-
-    Array:                     A >> \[{CE|{CE,}*CE}\]
+    Vector:                        V >> \[{CE|{CE,}*CE}\]
 
 */
 
@@ -160,18 +161,28 @@ private:
             } catch (parser_exception&) {
                 try {
                     lexer_.reset(p0);
-                    return getF_();
+                    return getDEF_();
                 } catch (parser_exception&) {
                     try {
                         lexer_.reset(p0);
-                        return getC_();
+                        return getRET_();
                     } catch (parser_exception&) {
                         try {
                             lexer_.reset(p0);
-                            return getVD_();
+                            return getF_();
                         } catch (parser_exception&) {
-                            lexer_.reset(p0);
-                            return getOP_();
+                            try {
+                                lexer_.reset(p0);
+                                return getC_();
+                            } catch (parser_exception&) {
+                                try {
+                                    lexer_.reset(p0);
+                                    return getVD_();
+                                } catch (parser_exception&) {
+                                    lexer_.reset(p0);
+                                    return getOP_();
+                                }
+                            }
                         }
                     }
                 }
@@ -415,7 +426,28 @@ private:
 
     Node getVAL_() {
         try {
-            return getID_();
+            auto name = getID_();
+
+            auto p0 = lexer_.mark();
+            if (lexer_.next_lexeme().type == LT_L_BRACKET) {
+                name.adopt(Node());
+
+                p0 = lexer_.mark();
+                while (lexer_.next_lexeme().type != LT_R_BRACKET) {
+                    lexer_.reset(p0);
+                    name.children[0]->adopt(getCE_());
+
+                    p0 = lexer_.mark();
+                    if (lexer_.next_lexeme().type != LT_COMMA)
+                        lexer_.reset(p0);
+                    p0 = lexer_.mark();
+                }
+
+                return name;
+            }
+
+            lexer_.reset(p0);
+            return name;
         }
         catch (parser_exception&) {
             return getN_();
@@ -423,9 +455,11 @@ private:
     }
 
     Node getOP_() {
+        auto p0 = lexer_.mark();
         try {
             return getC_();
         } catch (parser_exception&) {
+            lexer_.reset(p0);
             auto p0 = lexer_.mark();
             auto node = getID_();
             auto lexeme = lexer_.next_lexeme();
@@ -456,7 +490,82 @@ private:
             lexer_.reset(p0);
             throw parser_exception(":= expected");
         }
+
+        p0 = lexer_.mark();
+
+        // vector
+        if (lexer_.next_lexeme().type == LT_L_BRACKET) {
+            auto ans = MAKE_OP<OP_DECLARE>(node, Node());
+
+            p0 = lexer_.mark();
+            while (lexer_.next_lexeme().type != LT_R_BRACKET) {
+                lexer_.reset(p0);
+                ans.children[0]->adopt(getCE_());
+
+                p0 = lexer_.mark();
+                if (lexer_.next_lexeme().type != LT_COMMA)
+                    lexer_.reset(p0);
+                p0 = lexer_.mark();
+            }
+
+            return ans;
+        }
+
+        lexer_.reset(p0);
         return MAKE_OP<OP_DECLARE>(node, getCE_());
+    }
+
+    Node getRET_() {
+        auto p0 = lexer_.mark();
+        if (lexer_.next_lexeme().type == LT_LEAVE)
+            return MAKE_OP<OP_LEAVE>();
+
+        lexer_.reset(p0);
+        if (lexer_.next_lexeme().type == LT_RET)
+            return MAKE_OP<OP_RET>(getCE_());
+
+        lexer_.reset(p0);
+        throw parser_exception("ret or leave expected");
+    }
+
+    Node getDEF_() {
+        auto p0 = lexer_.mark();
+        if (lexer_.next_lexeme().type != LT_DEF) {
+            lexer_.reset(p0);
+            throw parser_exception("def expected");
+        }
+
+        auto name = getID_();
+        auto name_str = std::string(NAME(name));
+
+        if (funcs.count(name_str))
+            throw parser_exception("function redeclaration");
+
+        if (lexer_.next_lexeme().type != LT_L_PARANTHESIS)
+            throw parser_exception("( expected");
+
+        std::vector<Node> args;
+
+        p0 = lexer_.mark();
+        while (lexer_.next_lexeme().type != LT_R_PARANTHESIS) {
+            lexer_.reset(p0);
+            args.push_back(getID_());
+
+            p0 = lexer_.mark();
+            if (lexer_.next_lexeme().type != LT_COMMA)
+                lexer_.reset(p0);
+            p0 = lexer_.mark();
+        }
+
+        if (lexer_.next_lexeme().type != LT_AS)
+            throw parser_exception("as expected");
+
+        auto body = getG_();
+
+        if (lexer_.next_lexeme().type != LT_END)
+            throw parser_exception("end expected");
+
+        return MAKE_OP<OP_DECLARE>(name, Node({NODE_UNDEFINED}, args), body);
     }
 
 public:
@@ -474,17 +583,20 @@ public:
 
 
 std::vector<std::map<std::string, int>> locals;
+std::vector<size_t> cur_nargs;
 std::map<std::string, int> call_start;
 
 
 void generate_asm_CALL(Node*, FILE*);
-void generate_block(Node*, FILE*);
+void generate_block(Node*, FILE*, int call_from = 0);
 void generate_asm_EXPR(Node*, FILE*);
 void generate_asm_OP(Node*, FILE*);
+void generate_asm_VD(Node*, FILE*);
+void generate_asm_FD(Node*, FILE*);
+void generate_asm_MFD(Node*, FILE*);
 
 
 void generate_asm_EXPR(Node* expr, FILE* memstream) {
-//puts("EXPR");
     if (IS_OP(*expr))
         switch (OP(*expr)) {
 #define DEF_MATH_OP(name, type, mnemonic, latex_mnemonic, arg_num, proc_command) \
@@ -523,7 +635,6 @@ void generate_asm_EXPR(Node* expr, FILE* memstream) {
 }
 
 void generate_asm_OP(Node* op, FILE* memstream) {
-//puts("OP");
     switch (OP(*op)) {
 #define DEF_ASSIGN_OP(name, mnemonic, proc_command) \
             case OP_##name: { \
@@ -545,7 +656,6 @@ void generate_asm_OP(Node* op, FILE* memstream) {
 #include "operators.h"
 #undef DEF_ASSIGN_OP
             case OP_IF: {
-//puts("IF");
                 auto cond = op->children[0];
                 generate_asm_EXPR(cond, memstream);
 
@@ -568,7 +678,6 @@ void generate_asm_OP(Node* op, FILE* memstream) {
                 break;
             }
             case OP_WHILE: {
-//puts("WHILE");
                 auto start = ftell(memstream);
 
                 generate_block(op->children[0], memstream);
@@ -583,7 +692,6 @@ void generate_asm_OP(Node* op, FILE* memstream) {
 }
 
 void generate_asm_CALL(Node* call, FILE* memstream) {
-//puts("CALL");
     std::string name = NAME(*call);
     // reverse!!
     for (auto it_child = call->children.rbegin(); it_child != call->children.rend(); ++it_child) {
@@ -617,12 +725,11 @@ void generate_asm_CALL(Node* call, FILE* memstream) {
     }
 }
 
-void generate_asm_FD(Node* fd, FILE* memstream) {
-//puts("FD");
+void generate_asm_MFD(Node* fd, FILE* memstream) {
     std::string name = NAME(*fd->children[0]);
     if (locals.back().count(name))
         throw parser_exception("function has already been declared");
-    locals.back()[name] = locals.back().size();
+    locals.back()[name] = locals.back().size() - cur_nargs.back();
 
     fwrite(get_address(CMD_FD), 1, 1, memstream);
     auto nskip_offset = ftell(memstream);
@@ -635,7 +742,8 @@ void generate_asm_FD(Node* fd, FILE* memstream) {
     locals.emplace_back();
     
     auto n = fd->children[1]->children.size();
-    for (auto i = 0u; i < n; ++i)
+    cur_nargs.push_back(n);
+    for (auto i = 0u; i < n; ++i) 
         locals.back()[NAME(*fd->children[1]->children[i])] = -i-1;
     
     generate_asm_EXPR(fd->children[2], memstream);
@@ -650,7 +758,49 @@ void generate_asm_FD(Node* fd, FILE* memstream) {
     fwrite(get_address<double>(locals.back().size() - n), sizeof(double), 1, memstream);
     fseek(memstream, from, SEEK_SET);
 
+    cur_nargs.pop_back();
     locals.pop_back();  
+}
+
+void generate_asm_FD(Node* fd, FILE* memstream) {
+    std::string name = NAME(*fd->children[0]);
+    if (locals.back().count(name))
+        throw parser_exception("function has already been declared");
+    locals.back()[name] = locals.back().size() - cur_nargs.back();;
+
+    fwrite(get_address(CMD_FD), 1, 1, memstream);
+    auto nskip_offset = ftell(memstream);
+
+    // endfunc
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+    call_start[name] = ftell(memstream) + strlen(SGN);
+    
+    // nargs
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+    // nlocals
+    fwrite(get_address<double>(0), sizeof(double), 1, memstream);
+
+    locals.emplace_back();
+    
+    auto n = fd->children[1]->children.size();
+    cur_nargs.push_back(n);
+    for (auto i = 0u; i < n; ++i)
+        locals.back()[NAME(*fd->children[1]->children[i])] = -i-1;
+    
+    generate_block(fd->children[2], memstream);
+    fwrite(get_address(CMD_LEAVE), 1, 1, memstream);
+    fwrite(get_address<double>(call_start[name]), sizeof(double), 1, memstream);
+
+    auto from = ftell(memstream);
+
+    fseek(memstream, nskip_offset, SEEK_SET);
+    fwrite(get_address<double>(from + strlen(SGN)), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(n), sizeof(double), 1, memstream);
+    fwrite(get_address<double>(locals.back().size() - n), sizeof(double), 1, memstream);
+    fseek(memstream, from, SEEK_SET);
+
+    cur_nargs.pop_back();
+    locals.pop_back();
 }
 
 
@@ -658,7 +808,7 @@ void generate_asm_VD(Node* vd, FILE* memstream) {
     std::string name = NAME(*vd->children[0]);
     if (locals.back().find(name) != locals.back().end())
         throw parser_exception("variable has already been declared");
-    locals.back()[name] = locals.back().size();
+    locals.back()[name] = locals.back().size() - cur_nargs.back();
 
     generate_asm_EXPR(vd->children[1], memstream);
     
@@ -667,14 +817,27 @@ void generate_asm_VD(Node* vd, FILE* memstream) {
 }
 
 
-void generate_block(Node* root, FILE* memstream) {
+void generate_block(Node* root, FILE* memstream, int call_from) {
     for (auto child : root->children)
         if (IS_OP(*child)) {
             if (OP(*child) == OP_DECLARE) {
-                if (IS_UNDEFINED(*child->children[1]))
-                    generate_asm_FD(child, memstream);
+                if (IS_UNDEFINED(*child->children[1])) {
+                    if (IS_UNDEFINED(*child->children[2]))
+                        generate_asm_FD(child, memstream);
+                    else
+                        generate_asm_MFD(child, memstream);
+                }
                 else
                     generate_asm_VD(child, memstream);
+            }
+            else if (OP(*child) == OP_LEAVE) {
+                fwrite(get_address(CMD_LEAVE), 1, 1, memstream);
+                fwrite(get_address<double>(call_from + strlen(SGN)), sizeof(double), 1, memstream);
+            }
+            else if (OP(*child) == OP_RET) {
+                generate_asm_EXPR(child->children[0], memstream);
+                fwrite(get_address(CMD_RET), 1, 1, memstream);
+                fwrite(get_address<double>(call_from + strlen(SGN)), sizeof(double), 1, memstream);
             }
             else
                 generate_asm_OP(child, memstream);
@@ -701,6 +864,7 @@ void generate_asm(Node* root) {
     fprintf(out, SGN);
 
     locals.emplace_back();
+    cur_nargs.push_back(0);
 
     // fd
     fwrite(get_address(CMD_FD), 1, 1, memstream);

@@ -17,6 +17,7 @@ enum LexemeType {
     LT_IDENTIFICATOR,
 
     LT_COMMA,
+    LT_SEMICOLON,
 
     LT_DERIVATIVE,
 
@@ -161,8 +162,7 @@ public:
                 }
                 
                 auto p0 = p_;
-                while (p_ != end_ && (('a' <= *p_ && *p_ <= 'z') ||
-                                      ('A' <= *p_ && *p_ <= 'Z')))
+                while (p_ != end_ && (isalpha(*p_) || isdigit(*p_) || *p_ == '_'))
                     ++p_;
                 
                 if (p0 == p_)

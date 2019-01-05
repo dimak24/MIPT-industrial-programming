@@ -40,4 +40,8 @@ DEF_KEYWORD(WHILE, "till the cows come home")
 DEF_KEYWORD(THEN, "then")
 DEF_KEYWORD(REPEAT, "repeat")
 DEF_KEYWORD(END, "end")
+DEF_KEYWORD(DEF, "def")
+DEF_KEYWORD(AS, "as")
+DEF_KEYWORD(RET, "ret")
+DEF_KEYWORD(LEAVE, "leave")
 #endif

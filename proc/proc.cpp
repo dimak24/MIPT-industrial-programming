@@ -3,7 +3,7 @@
 #include <string.h>
 #include <tuple>
 #include <math.h>
-#include "../../stack/stack.h"
+#include "../stack/stack.h"
 #include "processor.h"
 #include "reader.h"
 #include "verificator.h"
