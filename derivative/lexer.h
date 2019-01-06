@@ -86,6 +86,8 @@ public:
 #undef DEF_OP
           }
 
+    Lexer(const Lexer&) = delete;
+    Lexer(Lexer&&) = delete;
 
     ~Lexer() {}
 

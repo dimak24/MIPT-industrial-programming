@@ -57,7 +57,7 @@ public:
 
 class Parser {
 private:
-    Lexer lexer_;
+    Lexer& lexer_;
     std::map<std::string, Node*> funcs;
 
     Node getG_() {
@@ -572,8 +572,11 @@ public:
     Parser() = delete;
     ~Parser() {}
 
-    Parser(Lexer lexer)
+    Parser(Lexer& lexer)
         : lexer_(lexer) {}
+
+    Parser(const Parser&) = delete;
+    Parser(Parser&&) = delete;
 
 
     Node parse() {

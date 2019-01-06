@@ -14,7 +14,9 @@ int main(int argc, char** argv) {
     std::tie(text, sz) = read_text(argv[1]);
 
     try {
-        auto node = Parser(Lexer({text, sz})).parse();
+        Lexer lexer({text, sz});
+        Parser parser(lexer);
+        auto node = parser.parse();
         // dump(&node);
         generate_asm(&node);
     } catch (parser_exception& e) {
